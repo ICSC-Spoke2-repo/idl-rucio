@@ -1,0 +1,12 @@
+image:
+  registry: docker.io
+  repository: bitnami/postgresql
+  tag: latest
+
+persistence:
+  enabled: false
+
+auth:
+  username: rucio
+  password: secret
+  database: rucio

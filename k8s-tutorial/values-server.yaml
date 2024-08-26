@@ -1,0 +1,85 @@
+replicaCount: 1
+authReplicaCount: 0
+traceReplicaCount: 0
+
+image:
+  repository: lucapacioselli/rucio-server #rucio/rucio-server
+  tag: v1.0.3 #v1.0.2 #release-34.5.0
+
+#configMap:
+#  name: policy-package
+#  mountPath: /usr/local/lib/python3.9/site-packages/rucio/
+#  localPath: /root/k8s-tutorial/policy_package
+
+#volume:
+#  name: config-volume
+
+secretMounts:
+  - secretName: plugin
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/did_meta_plugins/custom-did-meta-plugin.py
+    subPath: custom-did-meta-plugin.py
+  - secretName: ayradb-cluster
+    mountPath: /tmp/AyraDB_cluster_credentials.cfg
+    subPath: AyraDB_cluster_credentials.cfg
+  - secretName: permissions
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/permission/permissions.py
+    subPath: permissions.py
+  - secretName: rse-accounts
+    mountPath: /opt/rucio/etc/rse-accounts.cfg
+    subPath: rse-accounts.cfg
+
+config:
+  metadata:
+    plugins: rucio.core.did_meta_plugins.custom-did-meta-plugin.CustomDidMetaPlugin
+  policy:
+    permission: permissions
+    schema: generic
+    #package: policy_package
+    lfn2pfn_algorithm_default: "hash"
+    support: "https://github.com/rucio/rucio/issues/"
+    support_rucio: "https://github.com/rucio/rucio/issues/"
+  credentials:
+    gcs: "/opt/rucio/etc/rse-accounts.cfg"
+  database:
+    default: "postgresql://rucio:secret@postgres-postgresql/rucio"
+    schema: "test"
+
+ingress:
+  enabled: true
+  annotations:
+    #kubernetes.io/ingress-class: nginx
+    #nginx.ingress.kubernetes.io/frontend-entry-points: http, https
+    #nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: lets-issuer
+  ingressClassName: nginx
+  hosts:
+    - rucio-server.131.154.98.24.myip.cloud.infn.it
+  tls: 
+  - hosts:
+    - rucio-server.131.154.98.24.myip.cloud.infn.it
+    secretName: tls-rucio-server
+
+authIngress:
+  enabled: false
+  annotations: 
+    kubernetes.io/ingress-class: nginx
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: lets-issuer
+  path: /
+  hosts: 
+    - rucio-auth-server.131.154.98.24.myip.cloud.infn.it
+  tls: 
+    - secretName: tls-rucio-auth-server
+
+#optional_config:
+#  rucio_policy_package: /root/k8s-tutorial/policy_package
+
+#secretMounts: []
+#  - volumeName: permissions
+#    secretName: permissions
+#    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/permission/
+#    subPaths:
+#     - custom-permissions.py

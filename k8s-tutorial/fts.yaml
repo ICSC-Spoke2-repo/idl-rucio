@@ -1,0 +1,76 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fts-server
+  labels:
+    app: fts
+spec:
+  selector:
+    matchLabels:
+      app: fts
+      tier: server
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: fts
+        tier: server
+    spec:
+      containers:
+      - name: fts-server
+        image: rucio/fts
+        ports:
+        - name: ftsapi
+          containerPort: 8446
+          protocol: TCP
+        - name: ftsmon
+          containerPort: 8449
+          protocol: TCP
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        volumeMounts:
+          - name: fts-cert
+            mountPath: /etc/grid-security/hostcert.pem
+            subPath: tls.cert
+          - name: fts-cert
+            mountPath: /etc/grid-security/hostkey.pem
+            subPath: tls.key
+          - name: ca-cert
+            mountPath: /etc/grid-security/certificates/5fca1cb1.0
+            subPath: tls.cert
+      volumes:
+        - name: fts-cert
+          secret:
+            secretName: hostcert-fts
+            defaultMode: 0600
+        - name: ca-cert
+          secret:
+            secretName: ca-cert
+            defaultMode: 0644
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fts
+  labels:
+    app: fts
+spec:
+  ports:
+    - port: 8446
+      targetPort: 8446
+      protocol: TCP
+      name: ftsapi
+    - port: 8449
+      targetPort: 8449
+      protocol: TCP
+      name: ftsmon
+  selector:
+    app: fts
+    tier: server
