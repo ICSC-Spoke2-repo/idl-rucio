@@ -1,2 +1,2 @@
-# rucio4leonardo
-Lavoro A/R tecnologico INFN
+# idl-rucio
+rucio wrapper for the IDL Innovation Grant
