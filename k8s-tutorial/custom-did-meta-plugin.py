@@ -55,7 +55,8 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         if key == "JSON":
             try:
                 dict = json.loads(value)
-                print(type(dict))
+                json_format = json.dumps(dict, indent = 4)
+                print(json_format)
             #try:
             #    lines = value.strip("{}\n ").replace("\t", "").splitlines()
             

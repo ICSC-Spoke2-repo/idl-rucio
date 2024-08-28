@@ -1,6 +1,8 @@
 import sys
 sys.path.append("/usr/local/lib/python3.9/site-packages/")
 
+import requests
+import certifi
 import argparse
 import json
 
@@ -73,7 +75,7 @@ class Rucio4Leo():
 
 def main():
     # Setup argument parser
-    parser = argparse.ArgumentParser(description="Choose a method to call.")
+    parser = argparse.ArgumentParser(description="Choose a method to call.") # This is the description of the binary if you read the help message {-h, --help}
     parser.add_argument('--method', choices=['upload', 'download'], help='Method to call', required = True)
     parser.add_argument('--account', type=str, help='Account name')
     parser.add_argument('--scope', type=str, help='Scope')
@@ -94,4 +96,7 @@ def main():
         myClass.customDownload(args.message)
 
 if __name__ == "__main__":
+    # Make a request to the service behind the Ingress
+    response = requests.get('https://rucio-server.131.154.98.24.myip.cloud.infn.it:443', verify=certifi.where()) #verify='/etc/pki/tls/certs/ca-bundle.crt'       
+    
     main()
