@@ -7,11 +7,13 @@ WORKDIR /opt/conda/
 RUN git clone https://github.com/LucaPacioselli/Wrap-Env.git
 #Extract the wrapper and the conda env files in the parent directory
 RUN mv /opt/conda/Wrap-Env/conda_rucio_env.yaml /opt/conda/
-#RUN mv /opt/conda/Wrap-Env/post-start-script-jhub.sh /opt/conda/
+RUN mv /opt/conda/Wrap-Env/post-start-script-jhub.sh /opt/conda/
 #Root otherwise you can't write to /usr/bin
 USER root
 RUN mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
-RUN chmod +x /opt/conda/Wrap-Env/post-start-script-jhub.sh
+RUN chmod a+x /usr/bin/wrap.py
+RUN chmod +x /opt/conda/post-start-script-jhub.sh
+RUN rm -r Wrap-Env
 
 #Initialize conda
 #RUN conda init
@@ -47,6 +49,7 @@ RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel
 
 #Create an empty rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/
 RUN echo "" > /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
+RUN chmod a+w /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 
 #RUN mkdir -p /opt/rucio/etc/
 #RUN cd /opt/rucio/etc/
