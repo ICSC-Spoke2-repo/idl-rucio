@@ -6,6 +6,7 @@ WORKDIR /opt/conda/
 #Copy from github wrapper.py and conda_rucio_env.yaml files
 RUN git clone https://github.com/LucaPacioselli/Wrap-Env.git
 WORKDIR /opt/conda/Wrap-Env/
+RUN ls -R
 #Extract the wrapper and the conda env files in the parent directory
 #RUN mv /opt/conda/Wrap-Env/conda_rucio_env.yaml /opt/conda/
 #RUN mv /opt/conda/Wrap-Env/script_jhub.sh /opt/conda/
