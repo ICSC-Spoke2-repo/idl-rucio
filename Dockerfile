@@ -25,15 +25,18 @@ RUN rm -r Wrap-Env
 #Create environment with working rucio client 
 #WORKDIR /opt/conda/ 
 SHELL ["/bin/bash", "-c"]
-RUN conda init
+RUN source /opt/conda/etc/profile.d/conda.sh && \
+    conda init
 RUN source ~/.bashrc
 RUN echo \
 "if [ -f ~/.bashrc ]; then \
     source ~/.bashrc \
 fi" > ~/.bash_profile
 RUN conda env create -f conda_rucio_env.yaml
-RUN conda activate temp-rucio-env
-RUN conda install ipykernel
+RUN source /opt/conda/etc/profile.d/conda.sh && \
+    conda activate temp-rucio-env
+    RUN source /opt/conda/etc/profile.d/conda.sh && \
+    conda install ipykernel
 RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
 
 ##Set temp-rucio-env as default env
