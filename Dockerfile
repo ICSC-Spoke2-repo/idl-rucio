@@ -7,9 +7,11 @@ WORKDIR /opt/conda/
 RUN git clone https://github.com/LucaPacioselli/Wrap-Env.git
 #Extract the wrapper and the conda env files in the parent directory
 RUN mv /opt/conda/Wrap-Env/conda_rucio_env.yaml /opt/conda/
+RUN mv /opt/conda/Wrap-Env/post-start-script-jhub.sh /opt/conda/
 #Root otherwise you can't write to /usr/bin
 USER root
 RUN mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
+RUN chmod +x /opt/conda/post-start-script-jhub.sh
 RUN rm -r Wrap-Env
 
 #Initialize conda
@@ -35,7 +37,7 @@ fi" > ~/.bash_profile
 RUN conda env create -f conda_rucio_env.yaml
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate temp-rucio-env
-    RUN source /opt/conda/etc/profile.d/conda.sh && \
+RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda install ipykernel
 RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
 
