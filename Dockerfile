@@ -6,8 +6,10 @@ WORKDIR /opt/conda/
 RUN git clone https://github.com/LucaPacioselli/Wrap-Env.git
 #Extract the wrapper and the conda env files in the parent directory
 RUN mv /opt/conda/Wrap-Env/conda_rucio_env.yaml /opt/conda/
-RUN sudo mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
+USER root
+RUN mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
 RUN rm -r Wrap-Env
+USER nonrootuser
 
 #Initialize conda
 RUN conda init
