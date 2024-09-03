@@ -11,8 +11,7 @@ RUN mv /opt/conda/Wrap-Env/post-start-script-jhub.sh /opt/conda/
 #Root otherwise you can't write to /usr/bin
 USER root
 RUN mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
-RUN chmod +x /opt/conda/post-start-script-jhub.sh
-RUN rm -r Wrap-Env
+RUN chmod +x /opt/conda/Wrap-Env/post-start-script-jhub.sh
 
 #Initialize conda
 #RUN conda init
