@@ -32,6 +32,6 @@ RUN echo "" > /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 #RUN nano rucio.cfg
 
 #Create a kernel from temp-rucio-env
-RUN conda activate env temp-rucio-env
+#RUN conda activate env temp-rucio-env
 RUN conda install ipykernel
 RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
