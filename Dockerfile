@@ -22,7 +22,7 @@ RUN conda env create -f conda_rucio_env.yaml
 
 #Set temp-rucio-env as default env
 RUN echo "conda activate temp-rucio-env" > .bash_profile
-RUN source ~/.bash_profile
+#RUN source ~/.bash_profile
 
 #Create an empty rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/
 RUN echo "" > /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
