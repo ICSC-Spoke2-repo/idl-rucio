@@ -14,7 +14,7 @@ RUN ls -R
 USER root
 RUN mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
 RUN chmod a+x /usr/bin/wrap.py
-RUN chmod +x /opt/conda/post-start-script-jhub.sh
+RUN chmod +x /opt/conda/Wrap-Env/script_jhub.sh
 #RUN rm -r Wrap-Env
 
 #Initialize conda
