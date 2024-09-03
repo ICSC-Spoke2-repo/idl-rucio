@@ -7,31 +7,31 @@ WORKDIR /opt/conda/
 RUN git clone https://github.com/LucaPacioselli/Wrap-Env.git
 #Extract the wrapper and the conda env files in the parent directory
 RUN mv /opt/conda/Wrap-Env/conda_rucio_env.yaml /opt/conda/
-#Root otherwise you can't write to /usr/bin
-USER root
-RUN mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
+##Root otherwise you can't write to /usr/bin
+#USER root
+RUN mv /opt/conda/Wrap-Env/wrap.py /usr/localbin/
 RUN rm -r Wrap-Env
 
-WORKDIR /root/
+WORKDIR /home/
 
 #Initialize conda
 RUN conda init
-RUN source /root/.bashrc
+RUN source /home/.bashrc
 
 #.bashrc is a non-login shell, to make conda init work when opening a new terminal you need to edit .bash_profile 
 RUN echo \
-"if [ -f /root/.bashrc ]; then \
-    source /root/.bashrc \
-fi" > /root/.bash_profile
+"if [ -f /home/.bashrc ]; then \
+    source /home/.bashrc \
+fi" > /home/.bash_profile
 
 #Create environment with working rucio client 
 WORKDIR /opt/conda/ 
 RUN conda env create -f conda_rucio_env.yaml
 
 #Set temp-rucio-env as default env
-WORKDIR /root/
-RUN echo "conda activate temp-rucio-env" >> /root/.bashrc
-RUN source /root/.bashrc
+WORKDIR /home/
+RUN echo "conda activate temp-rucio-env" >> /home/.bashrc
+RUN source /home/.bashrc
 
 #Create an empty rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/
 RUN echo "" > /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
