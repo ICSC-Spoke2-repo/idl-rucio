@@ -9,7 +9,6 @@ RUN mv /opt/conda/Wrap-Env/conda_rucio_env.yaml /opt/conda/
 USER root
 RUN mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
 RUN rm -r Wrap-Env
-USER nonrootuser
 
 #Initialize conda
 RUN conda init
