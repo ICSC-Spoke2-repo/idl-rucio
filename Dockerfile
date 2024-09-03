@@ -1,7 +1,9 @@
 FROM jupyter/tensorflow-notebook:ubuntu-22.04
 
+WORKDIR /home/jovyan
+
 #Copy from github wrapper.py and conda_rucio_env.yaml files
-RUN cd /home/jovyan && git clone https://github.com/LucaPacioselli/Wrap-Env.git
+RUN git clone https://github.com/LucaPacioselli/Wrap-Env.git
 #Extract the wrapper and the conda env files in the parent directory
 RUN mv /home/jovyan/Wrap-Env/conda_rucio_env.yaml /home/jovyan/
 RUN mv /home/jovyan/Wrap-Env/wrap.py /home/jovyan/
@@ -21,7 +23,7 @@ fi" > .bash_profile
 RUN conda env create -f conda_rucio_env.yaml
 
 #Set temp-rucio-env as default env
-RUN echo "conda activate temp-rucio-env" > .bash_profile
+RUN echo "conda activate temp-rucio-env" >> .bashrc
 RUN source ~/.bashrc
 
 #Create an empty rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/
@@ -32,6 +34,6 @@ RUN echo "" > /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 #RUN nano rucio.cfg
 
 #Create a kernel from temp-rucio-env
-#RUN conda activate env temp-rucio-env
+RUN conda activate env temp-rucio-env
 RUN conda install ipykernel
 RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
