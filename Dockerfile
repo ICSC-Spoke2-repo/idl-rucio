@@ -9,7 +9,7 @@ RUN git clone https://github.com/LucaPacioselli/Wrap-Env.git
 RUN mv /opt/conda/Wrap-Env/conda_rucio_env.yaml /opt/conda/
 ##Root otherwise you can't write to /usr/bin
 #USER root
-RUN mv /opt/conda/Wrap-Env/wrap.py /usr/localbin/
+RUN mv /opt/conda/Wrap-Env/wrap.py /usr/local/bin/
 RUN rm -r Wrap-Env
 
 WORKDIR /home/
