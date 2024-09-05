@@ -14,10 +14,10 @@ RUN ls -R
 USER root
 RUN mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
 RUN chmod a+x /usr/bin/wrap.py
-RUN chmod +x /opt/conda/Wrap-Env/script_jhub.sh
+RUN chmod a+x /opt/conda/Wrap-Env/script_jhub.sh
 #RUN rm -r Wrap-Env
 
-#Initialize conda
+
 #RUN conda init
 #RUN source ~/.bashrc
 
@@ -27,22 +27,31 @@ RUN chmod +x /opt/conda/Wrap-Env/script_jhub.sh
 #    source ~/.bashrc \
 #fi" > ~/.bash_profile
 
-#Create environment with working rucio client 
+
 #WORKDIR /opt/conda/ 
+
+#Initialize conda
 SHELL ["/bin/bash", "-c"]
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda init
+
+#.bashrc is a non-login shell, to make conda init work when opening a new terminal we need to edit .bash_profile 
 RUN source ~/.bashrc
 RUN echo \
 "if [ -f ~/.bashrc ]; then \
     source ~/.bashrc \
 fi" > ~/.bash_profile
+
+#Create environment with working rucio client 
 RUN conda env create -f conda_rucio_env.yaml
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate temp-rucio-env
+
+#Install ipykernel to create a kernel for the notebook
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda install ipykernel
 #RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
+
 RUN mv /opt/conda/Wrap-Env/rucio.cfg /opt/conda/envs/temp-rucio-env/etc/
 RUN chmod a+w /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 
@@ -66,5 +75,3 @@ RUN chmod a+w /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 #RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
 
 WORKDIR /home/jovyan
-
-#Env caricato, bashrc scritto e parte con temp-rucio-env. User ha python3.10 e wrap punta a path che non esiste nel user-lab. Kernel non creato...
