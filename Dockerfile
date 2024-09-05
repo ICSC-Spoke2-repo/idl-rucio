@@ -1,4 +1,4 @@
-FROM jupyter/tensorflow-notebook:ubuntu-22.04
+FROM jupyter/datascience-notebook:x86_64-ubuntu-22.04
 
 #Because in k8s /home/jovyan is built by the provisioner and you cannot keep anything there at the start
 WORKDIR /opt/conda/
