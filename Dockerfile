@@ -13,6 +13,8 @@ RUN ls -R
 #Root otherwise you can't write to /usr/bin
 USER root
 RUN mv /opt/conda/Wrap-Env/wrap.py /usr/bin/
+RUN mv /opt/conda/Wrap-Env/rucio.cfg /opt/conda/envs/temp-rucio-env/etc/
+RUN chmod a+w /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 RUN chmod a+x /usr/bin/wrap.py
 RUN chmod +x /opt/conda/Wrap-Env/script_jhub.sh
 #RUN rm -r Wrap-Env
@@ -50,9 +52,9 @@ RUN source /opt/conda/etc/profile.d/conda.sh && \
 #RUN source /home/.bashrc
 
 #Create an empty rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/ if it doesn't already exist
-RUN [ ! -f /opt/conda/envs/temp-rucio-env/etc/rucio.cfg ] && touch /opt/conda/envs/temp-rucio-env/etc/rucio.cfg || echo "rucio.cfg already exists"
+#RUN [ ! -f /opt/conda/envs/temp-rucio-env/etc/rucio.cfg ] && touch /opt/conda/envs/temp-rucio-env/etc/rucio.cfg || echo "rucio.cfg already exists"
 #RUN echo "" > /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
-RUN chmod a+w /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
+#RUN chmod a+w /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 
 #RUN mkdir -p /opt/rucio/etc/
 #RUN cd /opt/rucio/etc/
