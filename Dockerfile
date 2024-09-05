@@ -42,15 +42,16 @@ RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate temp-rucio-env
 RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda install ipykernel
-RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
+#RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
 
 ##Set temp-rucio-env as default env
 #WORKDIR /home/
 #RUN echo "conda activate temp-rucio-env" >> /home/.bashrc
 #RUN source /home/.bashrc
 
-#Create an empty rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/
-RUN echo "" > /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
+#Create an empty rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/ if it doesn't already exist
+RUN [ ! -f /opt/conda/envs/temp-rucio-env/etc/rucio.cfg ] && touch /opt/conda/envs/temp-rucio-env/etc/rucio.cfg || echo "rucio.cfg already exists"
+#RUN echo "" > /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 RUN chmod a+w /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 
 #RUN mkdir -p /opt/rucio/etc/
@@ -63,3 +64,5 @@ RUN chmod a+w /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
 #RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
 
 WORKDIR /home/jovyan
+
+#Env caricato, bashrc scritto e parte con temp-rucio-env. User ha python3.10 e wrap punta a path che non esiste nel user-lab. Kernel non creato...
