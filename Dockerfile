@@ -49,8 +49,8 @@ RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate temp-rucio-env
 
 #Install ipykernel to create a kernel for the notebook
-RUN source /opt/conda/etc/profile.d/conda.sh && \
-    conda install ipykernel
+#RUN source /opt/conda/etc/profile.d/conda.sh && \
+#    conda install ipykernel
 #RUN python3 -m ipykernel install --user --name rucio --display-name "RucioKernel"
 
 RUN mv /opt/conda/Wrap-Env/rucio.cfg /opt/conda/envs/temp-rucio-env/etc/
