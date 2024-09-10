@@ -1,9 +1,12 @@
+#!/usr/bin/env python3
+
 import sys
 sys.path.append("/usr/local/lib/python3.9/site-packages/")
 
 import requests
 import certifi
 import argparse
+import configparser
 import json
 
 ### Set Rucio virtual environment configuration ###
@@ -22,7 +25,7 @@ from rucio.common import exception #import (AccountNotFound, Duplicate, RucioExc
 #from rucio.common.utils import adler32, detect_client_location, execute, generate_uuid, md5, send_trace, GLOBALLY_SUPPORTED_CHECKSUMS
 
 class Rucio4Leo():
-    def __init__(self, account):
+    def __init__(self):
         #self.scope = scope
         #self.rse = rse
         #self.working_folder = working_folder
@@ -32,11 +35,16 @@ class Rucio4Leo():
         self.repc = ReplicaClient()
         self.rulesClient = RuleClient()
         
+        # Read account from the rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
+        config = configparser.ConfigParser()
+        config.read('/opt/conda/envs/temp-rucio-env/etc/rucio.cfg')
+        account = config.get('client', 'account')
+        
         # Configuration
         self.account = account
 
         # account=account
-        self.client = Client(account=self.account)
+        self.client = Client(account=account)
 
     def customUpload(self, scope, file, meta, rse):
         '''
@@ -77,7 +85,7 @@ def main():
     # Setup argument parser
     parser = argparse.ArgumentParser(description="Choose a method to call.") # This is the description of the binary if you read the help message {-h, --help}
     parser.add_argument('--method', choices=['upload', 'download'], help='Method to call', required = True)
-    parser.add_argument('--account', type=str, help='Account name')
+    #parser.add_argument('--account', type=str, help='Account name')
     parser.add_argument('--scope', type=str, help='Scope')
     parser.add_argument('--rse', type=str, help='RSE expression')
     parser.add_argument('--file', type=str, help='File path of the data file')
@@ -87,7 +95,7 @@ def main():
     args = parser.parse_args()
 
     # Create an instance of MyClass
-    myClass = Rucio4Leo(args.account)
+    myClass = Rucio4Leo()
 
     # Call the chosen method
     if args.method == 'upload':
