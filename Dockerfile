@@ -45,6 +45,14 @@ RUN echo \
     source ~/.bashrc \
 fi" > ~/.bash_profile
 
+#Install Rucio JLab extension with some dependencies
+USER root
+#NodeJS v>=20
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+RUN sudo apt-get install -y nodejs
+RUN pip3 install rucio-jupyterlab
+RUN apt install voms-clients-java
+
 #Create environment with working rucio client 
 RUN conda env create -f conda_rucio_env.yaml
 RUN source /opt/conda/etc/profile.d/conda.sh && \
