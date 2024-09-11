@@ -52,6 +52,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 RUN sudo apt-get install -y nodejs
 RUN pip3 install rucio-jupyterlab
 RUN apt install voms-clients-java
+RUN pip3 install --upgrade jupyterlab
 
 #Create environment with working rucio client 
 RUN conda env create -f conda_rucio_env.yaml
