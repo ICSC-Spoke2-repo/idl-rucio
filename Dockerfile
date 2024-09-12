@@ -47,6 +47,8 @@ fi" > ~/.bash_profile
 
 #Install Rucio JLab extension with some dependencies
 USER root
+#To make sure that appending the rucio-jlab config to the already existing .json doesn't create an invalid JSON file
+RUN sudo apt install jq
 #NodeJS v>=20
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 RUN sudo apt-get install -y nodejs
@@ -66,6 +68,9 @@ RUN source /opt/conda/etc/profile.d/conda.sh && \
 
 RUN mv /opt/conda/Wrap-Env/rucio.cfg /opt/conda/envs/temp-rucio-env/etc/
 RUN chmod a+w /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
+RUN chmod a+w /etc/jupyter/jupyter_notebook_config.json
+RUN chmod -R u+w /etc/jupyter/
+RUN chmod a+w /opt/conda/pkgs/jupyter_core-5.7.2-py39hf3d152e_0/info/test/tests/dotipython/profile_default/ipython_kernel_config.py
 
 ##Set temp-rucio-env as default env
 #WORKDIR /home/
