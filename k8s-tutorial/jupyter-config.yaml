@@ -12,42 +12,55 @@
 singleuser:
   # use jupyterlab as the default interface 
   defaultUrl: "/lab"
+  storage:
+    extraVolumes:
+      - name: rucio4leo-config
+        configMap:
+          name: rucio4leo-config
+    extraVolumeMounts:
+      - name: rucio4leo-config
+        mountPath: /home/jovyan/rucio4leo_configs/
   extraEnv:
+    RUCIO_WILDCARD_ENABLED: "true"
     JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
   image:
     # You should replace the "latest" tag with a fixed version from:
     # https://hub.docker.com/r/jupyter/datascience-notebook/tags/
     # Inspect the Dockerfile at:
     # https://github.com/jupyter/docker-stacks/tree/HEAD/datascience-notebook/Dockerfile
-    name: jupyter/tensorflow-notebook
-    tag: ubuntu-22.04
+    name: lucapacioselli/jupyter4rucio #jupyter/tensorflow-notebook 
+    tag: test2-v1.9 #ubuntu-22.04 #test-v3.8 
   # `cmd: null` allows the custom CMD of the Jupyter docker-stacks to be used
   # which performs further customization on startup.
   cmd: null
+  lifecycleHooks: 
+    postStart:
+      exec:
+        command: ["/opt/conda/script_jhub_copy.sh"]
   ### Storage is handled by the k8s cluster's local-path-provisioner ###
-  extraFiles:
+  #extraFiles:
     # jupyter_notebook_config reference: https://jupyter-notebook.readthedocs.io/en/stable/config.html
-    jupyter_notebook_config.json:
-      mountPath: /etc/jupyter/jupyter_notebook_config.json
+  #  jupyter_notebook_config.json:
+  #    mountPath: /etc/jupyter/jupyter_notebook_config.json
       # data is a YAML structure here but will be rendered to JSON file as our
       # file extension is ".json".
-      data:
-        MappingKernelManager:
+  #    data:
+  #      MappingKernelManager:
           # cull_idle_timeout: timeout (in seconds) after which an idle kernel is
           # considered ready to be culled
-          cull_idle_timeout: 1200 # default: 0
+  #        cull_idle_timeout: 1200 # default: 0
 
           # cull_interval: the interval (in seconds) on which to check for idle
           # kernels exceeding the cull timeout value
-          cull_interval: 120 # default: 300
+  #       cull_interval: 120 # default: 300
 
           # cull_connected: whether to consider culling kernels which have one
           # or more connections
-          cull_connected: true # default: false
+  #        cull_connected: true # default: false
 
           # cull_busy: whether to consider culling kernels which are currently
           # busy running some code
-          cull_busy: false # default: false
+  #        cull_busy: false # default: false
 
 #ingress:
 #  enabled: true
@@ -82,9 +95,8 @@ hub:
     Authenticator:
       admin_users:
         - test
-        - lpacioselli
-        - dspiga
-        - dciangottini
+        - prova
+        - testone
     DummyAuthenticator:
       password: password123
     JupyterHub:

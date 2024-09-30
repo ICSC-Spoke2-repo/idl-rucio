@@ -1,22 +1,54 @@
-from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Literal
+# Copyright European Organization for Nuclear Research (CERN) since 2012
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-import json 
+# Includes for AyraDB connection
+import random
+import string
+import sys
+import time 
+
+from adbc.core.adbc import adbc_1liner__write_record__wrapper
+from adbc.core.adbc import adbc_1liner__delete_record__wrapper
+from adbc.core.adbc import adbc_1liner__sql__wrapper
+from adbc.core.adbc import adbc_1liner__dump_table_to_warehouse__wrapper
+from adbc.core.adbc import adbc_1liner__dump_table_ild_metadata_to_warehouse
+from adbc.core.adbc import adbc__generate_record_key_from_field
+
+from datetime import datetime
+
+# Old includes for postgres did-meta plugin
+import json
 import operator
+from typing import TYPE_CHECKING
 
-from rucio.common import exception
+import psycopg2
+import psycopg2.extras
+
+from rucio.common import config, exception
+from rucio.common.types import InternalScope
 from rucio.core.did_meta_plugins.did_meta_plugin_interface import DidMetaPlugin
 from rucio.core.did_meta_plugins.filter_engine import FilterEngine
 from rucio.db.sqla import models
 from rucio.db.sqla.constants import DIDType
-from rucio.db.sqla.session import read_session, stream_session, transactional_session
-from rucio.db.sqla.util import json_implemented
+from sqlalchemy.sql.expression import true
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Any, Optional, Union
 
     from sqlalchemy.orm import Session
+    from rucio.db.sqla.models import ModelBase
 
     from rucio.common.types import InternalScope
 
@@ -25,22 +57,56 @@ class CustomDidMetaPlugin(DidMetaPlugin):
     """
     Interface for plugins managing metadata of DIDs
     """
-
     def __init__(self):
         super(CustomDidMetaPlugin, self).__init__()
-        self.plugin_name = "LUCA"
-    
-    def get_metadata(self, scope: "InternalScope", name: str, *, session: "Optional[Session]" = None) -> "Any":
-        """
-        Get data identifier metadata
+        self.plugin_name = "RUCIO4LEO"
 
-        :param scope: The scope name.
-        :param name: The data identifier name.
-        :param session: The database session in use.
-        """
-        print("Ecco a te i metadata!")
+        # AyraDB cluster INAF coordinates 
+        #ayradb_servers = [ {'ip': '95.217.130.33', 'port': 10021, 'name': 'ovqy400c' },
+        #                    {'ip': '37.27.21.168', 'port': 10021, 'name': 'wv98hjxd'} ]
+        
+        # AyraDB cluster INFN coordinates
+        self.ayradb_servers = [ {'ip': '65.109.166.225', 'port': 10021, 'name': 'bssm4u5y' }, 
+                               {'ip': '95.216.170.67', 'port': 10021, 'name': 'g5joxu2z'} ] 
 
-    def set_metadata(self, scope: "InternalScope", name: str, key: str, value: str, recursive: bool = False, *, session: "Optional[Session]" = None) -> None: #key: str, value: str,
+        # "INAF" cluster credentials
+        self.credentials = {'username': 'infn1', 'password': 'Gelat0AlTamar1nd0'}
+
+        self.table_name = 'metadata'
+
+        self.fields = {
+            "IDL_L4_VERS": "0.1",
+            "LINK": ""
+        }
+
+        self.field_labels_string = 'IDL_L4_VERS,LINK'
+
+    def convert_bytearrays(self, data):
+            if isinstance(data, dict):
+                # Recursively process each key-value pair in the dictionary
+                return {keys: self.convert_bytearrays(values) for keys, values in data.items()}
+            elif isinstance(data, list):
+                # Recursively process each element in the list
+                return [self.convert_bytearrays(item) for item in data]
+            elif isinstance(data, bytearray):
+                try:
+                    # Attempt to decode the bytearray to a string
+                    decoded_string = data.decode('utf-8')  # Change 'utf-8' if needed
+            
+                    # Try to convert the string to a datetime object
+                    try:
+                        # Adjust the format string as needed for your datetime format
+                       return datetime.strptime(decoded_string, '%Y-%m-%d %H:%M:%S.%f')
+                    except ValueError:
+                        return decoded_string  # Return as string if it can't be parsed as datetime
+            
+                except UnicodeDecodeError:
+                    return str(data)  # Return as a string representation if decoding fails
+            else:
+                return data  # Return as is if it's not a bytearray, list, or dict 
+
+    def set_metadata(self, scope: "InternalScope", name: str, key: str, value: str, 
+                     recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
         """
         Add metadata to data identifier.
 
@@ -54,129 +120,155 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         """
         if key == "JSON":
             try:
-                dict = json.loads(value)
-                json_format = json.dumps(dict, indent = 4)
-                print(json_format)
-            #try:
-            #    lines = value.strip("{}\n ").replace("\t", "").splitlines()
-            
-            #    processed_lines = []
-            #    for line in lines:
-            #        if line.strip():  # Ignore empty lines
-            #            keys, values = line.strip().split(":")
-            #            # Add quotes around the value if not already quoted
-            #            values = values.strip()
-            #        if not (values.startswith('"') and values.endswith('"')):
-            #            values = f'"{values}"'
-            #            processed_lines.append(f'{keys.strip()}:{values}')
+                # Utilizzare questo dict per editare la tabella SQL, "DID" da mettere in campo "LINK"
+                dict = json.loads(value) 
+                dict["DID"] = f"{scope}:{name}"
+                self.fields["LINK"] = dict["DID"]
 
-            #    processed_string = "{" + ", ".join(processed_lines) + "}"
+                # Key generated from a field which is unique for each record
+                key = adbc__generate_record_key_from_field(self.fields['LINK'])
+                print(key)
 
-            #    data = json.loads(processed_string)
+                # Write the record
+                res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, 
+                                                                self.credentials, self.table_name, 
+                                                                    key, self.fields)
+                
+                # Dump table to internal warehouse
+                res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, 
+                                                                                           self.credentials, self.table_name, 
+                                                                                           self.field_labels_string)
+                if res_dump_table == False:
+                    print(f'ERROR: dumping table: {error_dump}')
+                elif res_dump_table == True:
+                    print('Successfully dumped the table!')
 
-            #    json_data = json.dumps(data, indent=4)
-
-            #    print(json_data)
-            #try:
-            #    data = json.loads(value)
-            #    for keys, values in value.items():
-            #        print(json.dumps({keys: values}, indent=4))
-            #    print("Ho settato i metadati")
-            #try:
-            #    with open(value, 'r') as json_file:
-            #        data = json.load(json_file)
-            #        for keys, values in data.items():
-            #            print(json.dumps({keys: values}, indent=4))
-            #        print("Ho settato i metadati")
+                # Check result
+                if res == False:
+                    print(f'ERROR: writing a record: {error}')
+                elif res == True:
+                    print('Successfully wrote the metadata!')
+                
+                # Refuso della implementazione dummy
+                #json_format = json.dumps(dict, indent = 4)
+                #print(json_format)
             except Exception as e:
                 print(f"Error reading JSON file: {e}")
         else:
             print("Key must be 'JSON'")
 
-    def set_metadata_json(self, scope: "InternalScope", name: str, data: dict, key: str, value: str, recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
-        """
-        Add metadata to data identifier.
+    #def set_metadata_bulk(self, scope, name, metadata, recursive=False, *, session: "Optional[Session]" = None):
+    #    """
+    #    Bulk set metadata keys.
 
-        :param scope: The scope name.
-        :param name: The data identifier name.
-        :param file: Python dict converted from the original JSON file
-        :param key: the key.
-        :param value: the value.
-        :param did: The data identifier info.
-        :param recursive: Option to propagate the metadata change to content.
-        :param session: The database session in use.
-        """
-        for key, value in data.items():
-            print(json.dumps({key: value}, indent=4))
-        print("Ho settato i metadati")
+    #    :param scope: the scope of did
+    #    :param name: the name of the did
+    #    :param metadata: dictionary of metadata keypairs to be added
+    #    :param recursive: recurse into DIDs (not supported)
+    #    :param session: The database session in use
+    #    """
+        # upsert metadata
+    #    statement = "INSERT INTO {} (scope, name, vo, data) ".format(self.table) + \
+    #                "VALUES ('{}', '{}', '{}', '{}') ".format(scope.external, name, scope.vo, json.dumps(metadata)) + \
+    #                "ON CONFLICT (scope, name) DO UPDATE set data = {}.data || EXCLUDED.data;".format(self.table)
+    #    cur = self.client.cursor()
+    #    cur.execute(statement)
+    #    cur.close()
+    #    self.client.commit()
 
+    def get_metadata(self, scope, name, *, session: "Optional[Session]" = None):
+        """
+        Get data identifier metadata.
 
-    def set_metadata_bulk(self, scope: "InternalScope", name: str, meta: dict[str, "Any"], recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
+        :param scope: The scope name
+        :param name: The data identifier name
+        :param session: The database session in use
+        :returns: the metadata for the did
         """
-        Add metadata to data identifier in bulk.
+        const_sql_query = "SELECT * FROM ayradb.metadata WHERE LINK = '{}:{}';".format(scope.internal, name)
+        print(const_sql_query)
+        res, error, records = adbc_1liner__sql__wrapper(
+            self.ayradb_servers, self.credentials, 
+            const_sql_query, warehouse_query=True
+        )          
 
-        :param scope: The scope name.
-        :param name: The data identifier name.
-        :param meta: all key-values to set.
-        :type meta: dict
-        :param recursive: Option to propagate the metadata change to content.
-        :param session: The database session in use.
-        """
-        for key, value in meta.items():
-            self.set_metadata(scope, name, key, value, recursive=recursive, session=session)
+        print(records)
+        print(type(records))
+        print(records[0])
+        print(type(records[0]))
 
-    def delete_metadata(self, scope: "InternalScope", name: str, key: str, *, session: "Optional[Session]" = None) -> None:
-        """
-        Deletes the metadata stored for the given key.
+        # Convert the dictionary
+        converted_dict = self.convert_bytearrays(records[0])
 
-        :param scope: The scope of the did.
-        :param name: The name of the did.
-        :param key: Key of the metadata.
-        :param session: The database session in use.
-        """
-        print("Ho eliminato i metadati")
+        if res == False:
+            print(error)
+        elif res == True:
+            return converted_dict
 
-    def list_dids(
-        self,
-        scope: "InternalScope",
-        filters: dict[str, "Any"],
-        did_type: Literal['all', 'collection', 'dataset', 'container', 'file'] = 'collection',
-        ignore_case: bool = False,
-        limit: "Optional[int]" = None,
-        offset: "Optional[int]" = None,
-        long: bool = False,
-        recursive: bool = False,
-        *,
-        session: "Optional[Session]" = None
-    ) -> str: #"Iterator[Union[str, dict[str, Any]]]"
+    def delete_metadata(self, scope, name, key, *, session: "Optional[Session]" = None):
         """
-        Search data identifiers
+        Delete a key from metadata.
 
-        :param scope: the scope name.
-        :param filters: dictionary of attributes by which the results should be filtered.
-        :param did_type: the type of the did: all(container, dataset, file), collection(dataset or container), dataset, container, file.
-        :param ignore_case: ignore case distinctions.
-        :param limit: limit number.
-        :param offset: offset number.
-        :param long: Long format option to display more information for each DID.
-        :param session: The database session in use.
-        :param recursive: Recursively list DIDs content.
+        :param scope: the scope of did
+        :param name: the name of the did
+        :param key: the key to be deleted
+        :param session: the database session in use
         """
-        print("Ecco la tua lista di dids")
+        key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, name))
+        print(key)
+        res, error = adbc_1liner__delete_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key)
 
-    
-    def manages_key(self, key: str, *, session: "Optional[Session]" = None) -> bool:
-        """
-        Returns whether key is managed by this plugin or not.
-        :param key: Key of the metadata.
-        :param session: The database session in use.
-        :returns (Boolean)
-        """
-        return json_implemented(session=session)
+        if res == False:
+            print(f'ERROR: deleting the record: {error}' )
+        elif res == True:
+            print('Successfully deleted record')
+
+    def list_dids(self, scope, filters, did_type='all', ignore_case=False, limit=None, 
+                  offset=None, long=False, recursive=False, ignore_dids=None, *, session: "Optional[Session]" = None):
+
+        # backwards compatibility for filters as single {}.
+        if isinstance(filters, dict):
+            filters = [filters]
+
+        print(filters)
+        print(type(filters))
+
+        try:
+            # instantiate fe and create postgres query
+            fe = FilterEngine(filters, model_class=None, strict_coerce=False)
+            query_str = fe.create_postgres_query(
+                additional_filters=[('scope', operator.eq, scope.internal), ('vo', operator.eq, scope.vo)]
+            )
+        except Exception as e:
+            raise exception.DataIdentifierNotFound(e)
+        
+        sql_query = "SELECT * FROM ayradb.metadata WHERE {} ".format(query_str)
+        res, error, records = adbc_1liner__sql__wrapper(
+            self.ayradb_servers, self.credentials, 
+            sql_query, warehouse_query=True
+        )           
+
+        # Convert the records
+        res_list = []
+        i = 0
+        for elem in records:
+            converted_dict = self.convert_bytearrays(elem)
+            res_list[i] = converted_dict
+            i = i + 1
+
+        if res == False:
+            print(f'ERROR: error getting list of dids: {error}')
+        elif res == True:
+            return res_list
+
+    def manages_key(self, key, *, session: "Optional[Session]" = None):
+        return True
 
     def get_plugin_name(self):
         """
-        Returns a unique identifier for this plugin. This can be later used for filtering down results to this plugin only.
-        :returns: The name of the plugin.
+        Returns a unique identifier for this plugin. This can be later used for filtering down results to this
+        plugin only.
+
+        :returns: The name of the plugin
         """
         return self.plugin_name

@@ -37,7 +37,7 @@ class Rucio4Leo():
         
         # Read account from the rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
         config = configparser.ConfigParser()
-        config.read('/opt/conda/envs/temp-rucio-env/etc/rucio.cfg')
+        config.read('/opt/conda/etc/rucio.cfg')
         account = config.get('client', 'account')
         
         # Configuration

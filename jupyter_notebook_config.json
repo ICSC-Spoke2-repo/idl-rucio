@@ -1,0 +1,14 @@
+{
+    "RucioConfig": {
+        "instances": [
+            {
+                "name": "experiment.cern.ch",
+                "display_name": "Test-Rucio-Extension",
+                "rucio_base_url": "https://rucio-server.131.154.98.24.myip.cloud.infn.it:443",
+                "rucio_auth_url": "https://rucio-server.131.154.98.24.myip.cloud.infn.it:443",
+                "rucio_ca_cert": "/etc/ssl/certs/ca-certificates.crt",
+                "mode": "download"
+            }
+        ]
+    }
+}

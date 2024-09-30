@@ -18,6 +18,8 @@ secretMounts:
   - secretName: plugin
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/did_meta_plugins/custom-did-meta-plugin.py
     subPath: custom-did-meta-plugin.py
+  #  mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/did_meta_plugins/ayradb_didmeta_plugin.py
+  #  subPath: ayradb_didmeta_plugin.py
   - secretName: permissions
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/permission/permissions.py
     subPath: permissions.py

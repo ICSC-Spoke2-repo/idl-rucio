@@ -10,7 +10,7 @@ def edit_config(value1, value2, value3):
     config = configparser.ConfigParser()
 
     # Read the configuration file
-    config.read("/opt/conda/envs/temp-rucio-env/etc/rucio.cfg")
+    config.read("/opt/conda/etc/rucio.cfg")
 
     # Modify or add the three options within the section
     config.set('client', 'username', value1)
@@ -18,7 +18,7 @@ def edit_config(value1, value2, value3):
     config.set('client', 'password', value3)
 
     # Write the changes back to the file
-    with open("/opt/conda/envs/temp-rucio-env/etc/rucio.cfg", 'w') as configfile:
+    with open("/opt/conda/etc/rucio.cfg", 'w') as configfile:
         config.write(configfile)
 
     print(f"Updated 'rucio.cfg' -> username, password, account correctly")
