@@ -52,7 +52,7 @@ if ! grep -q 'WARNING: The server may have restarted.' ~/.bashrc; then
     echo 'echo "* WARNING: The server may have restarted.                          *"' >> ~/.bashrc
     echo 'echo "* If the output of rucio whoami is not shown at the startup of a   *"' >> ~/.bashrc
     echo 'echo "* new terminal, please edit the                                    *"' >> ~/.bashrc
-    echo 'echo "* /opt/conda/envs/temp-rucio-env/etc/rucio.cfg                     *"' >> ~/.bashrc
+    echo 'echo "* /opt/conda/etc/rucio.cfg                                         *"' >> ~/.bashrc
     echo 'echo "* with the cred.py script, e.g.:                                   *"' >> ~/.bashrc
     echo 'echo "* cred.py --user <USERNAME> --a <ACCOUNT>                          *"' >> ~/.bashrc
     echo 'echo "* Enter the password (hidden): <PASSWORD>                          *"' >> ~/.bashrc
