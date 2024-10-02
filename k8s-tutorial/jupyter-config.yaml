@@ -95,8 +95,6 @@ hub:
     Authenticator:
       admin_users:
         - test
-        - prova
-        - testone
     DummyAuthenticator:
       password: password123
     JupyterHub:

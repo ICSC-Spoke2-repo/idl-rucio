@@ -69,16 +69,18 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         self.ayradb_servers = [ {'ip': '65.109.166.225', 'port': 10021, 'name': 'bssm4u5y' }, 
                                {'ip': '95.216.170.67', 'port': 10021, 'name': 'g5joxu2z'} ] 
 
-        # "INAF" cluster credentials
+        # INFN cluster credentials
         self.credentials = {'username': 'infn1', 'password': 'Gelat0AlTamar1nd0'}
 
         self.table_name = 'metadata'
 
+        # Fixed fields ONLY for testing!
         self.fields = {
             "IDL_L4_VERS": "0.1",
             "LINK": ""
         }
 
+        # Field labels for the table dump in the internal warehouse of AyraDB (you can omit the fixed value labels)
         self.field_labels_string = 'IDL_L4_VERS,LINK'
 
     def convert_bytearrays(self, data):
@@ -120,12 +122,12 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         """
         if key == "JSON":
             try:
-                # Utilizzare questo dict per editare la tabella SQL, "DID" da mettere in campo "LINK"
+                # Use this Python dict to add the DID, which is unique in Rucio, in the "LINK" field or, in general,to edit the fields if needed 
                 dict = json.loads(value) 
                 dict["DID"] = f"{scope}:{name}"
                 self.fields["LINK"] = dict["DID"]
 
-                # Key generated from a field which is unique for each record
+                # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
                 key = adbc__generate_record_key_from_field(self.fields['LINK'])
                 print(key)
 
@@ -138,43 +140,23 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, 
                                                                                            self.credentials, self.table_name, 
                                                                                            self.field_labels_string)
+                
+                # Check result of dumping table
                 if res_dump_table == False:
                     print(f'ERROR: dumping table: {error_dump}')
                 elif res_dump_table == True:
                     print('Successfully dumped the table!')
 
-                # Check result
+                # Check result of writing record
                 if res == False:
                     print(f'ERROR: writing a record: {error}')
                 elif res == True:
                     print('Successfully wrote the metadata!')
                 
-                # Refuso della implementazione dummy
-                #json_format = json.dumps(dict, indent = 4)
-                #print(json_format)
             except Exception as e:
                 print(f"Error reading JSON file: {e}")
         else:
             print("Key must be 'JSON'")
-
-    #def set_metadata_bulk(self, scope, name, metadata, recursive=False, *, session: "Optional[Session]" = None):
-    #    """
-    #    Bulk set metadata keys.
-
-    #    :param scope: the scope of did
-    #    :param name: the name of the did
-    #    :param metadata: dictionary of metadata keypairs to be added
-    #    :param recursive: recurse into DIDs (not supported)
-    #    :param session: The database session in use
-    #    """
-        # upsert metadata
-    #    statement = "INSERT INTO {} (scope, name, vo, data) ".format(self.table) + \
-    #                "VALUES ('{}', '{}', '{}', '{}') ".format(scope.external, name, scope.vo, json.dumps(metadata)) + \
-    #                "ON CONFLICT (scope, name) DO UPDATE set data = {}.data || EXCLUDED.data;".format(self.table)
-    #    cur = self.client.cursor()
-    #    cur.execute(statement)
-    #    cur.close()
-    #    self.client.commit()
 
     def get_metadata(self, scope, name, *, session: "Optional[Session]" = None):
         """
@@ -185,23 +167,29 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :param session: The database session in use
         :returns: the metadata for the did
         """
+        # Constant SQL query to retrieve the metadata of a DID
         const_sql_query = "SELECT * FROM ayradb.metadata WHERE LINK = '{}:{}';".format(scope.internal, name)
+        
+        # Debug
         print(const_sql_query)
+
         res, error, records = adbc_1liner__sql__wrapper(
             self.ayradb_servers, self.credentials, 
             const_sql_query, warehouse_query=True
         )          
 
+        # Debug
         print(records)
         print(type(records))
         print(records[0])
         print(type(records[0]))
 
-        # Convert the dictionary
+        # Convert the Python dict from bytearrays to strings
         converted_dict = self.convert_bytearrays(records[0])
 
+        # Check result of getting the metadata for a DID
         if res == False:
-            print(error)
+            print(f'ERROR: retrieving the metadata: {error}')
         elif res == True:
             return converted_dict
 
@@ -214,10 +202,15 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :param key: the key to be deleted
         :param session: the database session in use
         """
+        # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
         key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, name))
+        
+        # Debug
         print(key)
+
         res, error = adbc_1liner__delete_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key)
 
+        # Check result of deleting the record
         if res == False:
             print(f'ERROR: deleting the record: {error}' )
         elif res == True:
@@ -226,23 +219,27 @@ class CustomDidMetaPlugin(DidMetaPlugin):
     def list_dids(self, scope, filters, did_type='all', ignore_case=False, limit=None, 
                   offset=None, long=False, recursive=False, ignore_dids=None, *, session: "Optional[Session]" = None):
 
-        # backwards compatibility for filters as single {}.
+        # Backwards compatibility for filters as single {}.
         if isinstance(filters, dict):
             filters = [filters]
 
+        # Debug
         print(filters)
         print(type(filters))
 
         try:
-            # instantiate fe and create postgres query
+            # instantiate fe and create SQL query
             fe = FilterEngine(filters, model_class=None, strict_coerce=False)
-            query_str = fe.create_postgres_query(
+            # This query DOESN'T work...
+            query_str = fe.create_sqla_query(
                 additional_filters=[('scope', operator.eq, scope.internal), ('vo', operator.eq, scope.vo)]
             )
         except Exception as e:
             raise exception.DataIdentifierNotFound(e)
         
+        # Probably we should return the list of dids that satisfy the filters...
         sql_query = "SELECT * FROM ayradb.metadata WHERE {} ".format(query_str)
+        
         res, error, records = adbc_1liner__sql__wrapper(
             self.ayradb_servers, self.credentials, 
             sql_query, warehouse_query=True
@@ -256,6 +253,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             res_list[i] = converted_dict
             i = i + 1
 
+        # Check if getting the list of dids was successful
         if res == False:
             print(f'ERROR: error getting list of dids: {error}')
         elif res == True:
