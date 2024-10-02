@@ -129,6 +129,8 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
                 # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
                 key = adbc__generate_record_key_from_field(self.fields['LINK'])
+                
+                # Debug
                 print(key)
 
                 # Write the record
