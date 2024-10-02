@@ -253,7 +253,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             res_list[i] = converted_dict
             i = i + 1
 
-        # Check if getting the list of dids was successful
+        # Check result of getting the list of dids
         if res == False:
             print(f'ERROR: error getting list of dids: {error}')
         elif res == True:
