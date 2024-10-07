@@ -136,7 +136,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             try:
                 # Use this Python dict to add the DID, which is unique in Rucio, in the "LINK" field or, in general,to edit the fields if needed 
                 dict = json.loads(value) 
-                self.fields["sha-256"] = dict['sha-256']
+                #self.fields["sha256"] = dict['sha-256']
                 self.fields["LINK"] = dict['DID']
 
                 # Debug

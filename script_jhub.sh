@@ -41,7 +41,7 @@ fi
 #Ensure .bash_profile sources .bashrc
 echo -e "if [ -f ~/.bashrc ]; then\n\tsource ~/.bashrc\nfi" > ~/.bash_profile
 
-#Add path to /usr/bin/ to locate wrap.py from anywhere if not already present
+#Add path to /usr/bin/ to locate leonardo_upload.py and cred.py from anywhere if not already present
 grep -qxF "export PATH=$PATH:/usr/bin" ~/.bashrc || echo -e "export PATH=$PATH:/usr/bin\n\n" >> ~/.bashrc
 
 #Check if the warning is already present
