@@ -29,6 +29,7 @@ from datetime import datetime
 
 # Old includes for postgres did-meta plugin
 import json
+import os
 import operator
 from typing import TYPE_CHECKING
 
@@ -43,6 +44,9 @@ from rucio.db.sqla import models
 from rucio.db.sqla.constants import DIDType
 from sqlalchemy.sql.expression import true
 
+# Import to get the checksum/hash of the data file for blockchain
+from rucio.client.didclient import DIDClient
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Any, Optional, Union
@@ -51,7 +55,6 @@ if TYPE_CHECKING:
     from rucio.db.sqla.models import ModelBase
 
     from rucio.common.types import InternalScope
-
 
 class CustomDidMetaPlugin(DidMetaPlugin):
     """
@@ -76,12 +79,21 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
         # Fixed fields ONLY for testing!
         self.fields = {
-            "IDL_L4_VERS": "0.1",
+            "IDL_L4_VERS": "0.5",
             "LINK": ""
         }
 
         # Field labels for the table dump in the internal warehouse of AyraDB (you can omit the fixed value labels)
         self.field_labels_string = 'IDL_L4_VERS,LINK'
+
+    #def get_checksum(self, name, scope):
+    #    didc = DIDClient(account="luca", auth_type="userpass", rucio_host="https://rucio-server.131.154.98.24.myip.cloud.infn.it:443", 
+    #             auth_host="https://rucio-server.131.154.98.24.myip.cloud.infn.it:443", ca_cert="/etc/ssl/certs/ca-certificates.crt", 
+    #             creds={"username": "paciosel", "password": "password123"})
+    #
+    #    dict = didc.get_metadata(name=name, scope=scope)
+    #    
+    #    return dict['md5']
 
     def convert_bytearrays(self, data):
             if isinstance(data, dict):
@@ -124,8 +136,11 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             try:
                 # Use this Python dict to add the DID, which is unique in Rucio, in the "LINK" field or, in general,to edit the fields if needed 
                 dict = json.loads(value) 
-                dict["DID"] = f"{scope}:{name}"
-                self.fields["LINK"] = dict["DID"]
+                self.fields["sha-256"] = dict['sha-256']
+                self.fields["LINK"] = dict['DID']
+
+                # Debug
+                print(self.fields)
 
                 # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
                 key = adbc__generate_record_key_from_field(self.fields['LINK'])
@@ -137,17 +152,45 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, 
                                                                 self.credentials, self.table_name, 
                                                                     key, self.fields)
-                
+            
+                # File name
+                #file_name = "tables_dumped.json"
+
+                # Check if file exists
+                #if os.path.exists(file_name):
+                #    print("File exists!")
+                    # File exists, read and update it
+                #    with open(file_name, "r") as json_file:
+                #        data = json.load(json_file)
+
+                    # # Append new tables to the existing list
+                    # if "tables" in data:
+                    #     data["tables"].extend(new_tables)  # Adding new tables to the existing list
+                    # else:
+                    #     data["tables"] = new_tables  # If "tables" key doesn't exist, create it
+                #else:
+                    # File doesn't exist, create a new one
+                #    data = {"tables": []}
+
+                #res_dump_table = False
                 # Dump table to internal warehouse
-                res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, 
-                                                                                           self.credentials, self.table_name, 
-                                                                                           self.field_labels_string)
+                #if self.table_name not in data["tables"]:
+                
+                res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
                 
                 # Check result of dumping table
                 if res_dump_table == False:
-                    print(f'ERROR: dumping table: {error_dump}')
+                   print(f'ERROR: dumping table: {error_dump}')
                 elif res_dump_table == True:
-                    print('Successfully dumped the table!')
+                   print('Successfully dumped the table!')
+                #   data["tables"].extend([self.table_name])
+
+                #with open(file_name, "w") as json_file:
+                #    json.dump(data, json_file, indent=4)
+
+                #print("################################")
+                #print(data["tables"])
+
 
                 # Check result of writing record
                 if res == False:
@@ -169,6 +212,15 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :param session: The database session in use
         :returns: the metadata for the did
         """
+        # Dump table to internal warehouse
+        #res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
+                
+        # Check result of dumping table
+        # if res_dump_table == False:
+        #     print(f'ERROR: dumping table: {error_dump}')
+        # elif res_dump_table == True:
+        #     print('Successfully dumped the table!')
+
         # Constant SQL query to retrieve the metadata of a DID
         const_sql_query = "SELECT * FROM ayradb.metadata WHERE LINK = '{}:{}';".format(scope.internal, name)
         
@@ -217,6 +269,14 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             print(f'ERROR: deleting the record: {error}' )
         elif res == True:
             print('Successfully deleted record')
+        
+        #res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
+                
+        # Check result of dumping table
+        #if res_dump_table == False:
+        #    print(f'ERROR: dumping table: {error_dump}')
+        #elif res_dump_table == True:
+        #    print('Successfully dumped the table!')
 
     def list_dids(self, scope, filters, did_type='all', ignore_case=False, limit=None, 
                   offset=None, long=False, recursive=False, ignore_dids=None, *, session: "Optional[Session]" = None):
@@ -229,37 +289,40 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         print(filters)
         print(type(filters))
 
-        try:
+        #try:
             # instantiate fe and create SQL query
-            fe = FilterEngine(filters, model_class=None, strict_coerce=False)
+        #    fe = FilterEngine(filters, model_class=None, strict_coerce=False)
             # This query DOESN'T work...
-            query_str = fe.create_sqla_query(
-                additional_filters=[('scope', operator.eq, scope.internal), ('vo', operator.eq, scope.vo)]
-            )
-        except Exception as e:
-            raise exception.DataIdentifierNotFound(e)
+        #    query_str = fe.create_sqla_query(
+        #        additional_filters=[('scope', operator.eq, scope.internal), ('vo', operator.eq, scope.vo)]
+        #    )
+        #except Exception as e:
+        #    raise exception.DataIdentifierNotFound(e)
         
         # Probably we should return the list of dids that satisfy the filters...
-        sql_query = "SELECT * FROM ayradb.metadata WHERE {} ".format(query_str)
+        #sql_query = "SELECT * FROM ayradb.metadata WHERE {} ".format(query_str)
         
-        res, error, records = adbc_1liner__sql__wrapper(
-            self.ayradb_servers, self.credentials, 
-            sql_query, warehouse_query=True
-        )           
+        #res, error, records = adbc_1liner__sql__wrapper(
+        #    self.ayradb_servers, self.credentials, 
+        #    sql_query, warehouse_query=True
+        #)           
 
         # Convert the records
-        res_list = []
-        i = 0
-        for elem in records:
-            converted_dict = self.convert_bytearrays(elem)
-            res_list[i] = converted_dict
-            i = i + 1
+        #res_list = []
+        #i = 0
+        #for elem in records:
+        #    converted_dict = self.convert_bytearrays(elem)
+        #    res_list[i] = converted_dict
+        #    i = i + 1
 
         # Check result of getting the list of dids
-        if res == False:
-            print(f'ERROR: error getting list of dids: {error}')
-        elif res == True:
-            return res_list
+        #if res == False:
+        #    print(f'ERROR: error getting list of dids: {error}')
+        #elif res == True:
+        #    return res_list
+
+        # For now we return a NotImplementedError
+        return f'ERROR: error getting list of dids: NotImplementedError'
 
     def manages_key(self, key, *, session: "Optional[Session]" = None):
         return True

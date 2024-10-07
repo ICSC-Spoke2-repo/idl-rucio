@@ -3,11 +3,14 @@
 import sys
 sys.path.append("/usr/local/lib/python3.9/site-packages/")
 
-import requests
-import certifi
+#import requests
+#import certifi
 import argparse
 import configparser
 import json
+
+# Include to compute the sha-256 checksum of the data file
+import hashlib
 
 ### Set Rucio virtual environment configuration ###
 #os.environ['RUCIO_HOME']=os.path.expanduser('~/Rucio-v2/rucio')
@@ -23,6 +26,13 @@ from rucio.common import exception #import (AccountNotFound, Duplicate, RucioExc
                                     #ReplicationRuleCreationTemporaryFailed, InvalidRuleWeight, StagingAreaRuleRequiresLifetime)
 
 #from rucio.common.utils import adler32, detect_client_location, execute, generate_uuid, md5, send_trace, GLOBALLY_SUPPORTED_CHECKSUMS
+
+def compute_sha256(file_path):
+    hash_sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_sha256.update(chunk)
+    return hash_sha256.hexdigest()
 
 class Rucio4Leo():
     def __init__(self):
@@ -64,10 +74,11 @@ class Rucio4Leo():
                 'did_name': did_name,  
             }])
 
-            # Parse the JSON file in a Python dict
+            # Parse the JSON file in a Python dict and add the "DID" and "sha-256" metadata
             with open(meta, 'r') as m:
                 json_dict = json.load(m)
                 json_dict['DID'] = f'{did_scope}:{did_name}'
+                json_dict['sha-256'] = compute_sha256(file)
                 json_string = json.dumps(json_dict)
 
             # Set the metadata for the uploaded file
@@ -83,8 +94,8 @@ class Rucio4Leo():
 
 def main():
     # Setup argument parser
-    parser = argparse.ArgumentParser(description="Choose a method to call.") # This is the description of the binary if you read the help message {-h, --help}
-    parser.add_argument('--method', choices=['upload', 'download'], help='Method to call', required = True)
+    parser = argparse.ArgumentParser(description="Custom upload: upload + set-metadata") # This is the description of the binary if you read the help message {-h, --help}
+    #parser.add_argument('--method', choices=['upload', 'download'], help='Method to call', required = True)
     #parser.add_argument('--account', type=str, help='Account name')
     parser.add_argument('--scope', type=str, help='Scope')
     parser.add_argument('--rse', type=str, help='RSE expression')
@@ -98,13 +109,13 @@ def main():
     myClass = Rucio4Leo()
 
     # Call the chosen method
-    if args.method == 'upload':
-        myClass.customUpload(args.scope, args.file, args.meta, args.rse)
-    elif args.method == 'download':
-        myClass.customDownload(args.message)
+    #if args.method == 'upload':
+    myClass.customUpload(args.scope, args.file, args.meta, args.rse)
+    #elif args.method == 'download':
+    #    myClass.customDownload(args.message)
 
 if __name__ == "__main__":
     # Make a request to the service behind the Ingress
-    response = requests.get('https://rucio-server.131.154.98.24.myip.cloud.infn.it:443', verify=certifi.where()) #verify='/etc/pki/tls/certs/ca-bundle.crt'       
+    #response = requests.get('https://rucio-server.131.154.98.24.myip.cloud.infn.it:443', verify=certifi.where()) #verify='/etc/pki/tls/certs/ca-bundle.crt'       
     
     main()
