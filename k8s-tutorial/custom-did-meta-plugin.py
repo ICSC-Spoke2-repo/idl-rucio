@@ -140,6 +140,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 self.fields["LINK"] = dict['DID']
 
                 # Debug
+                print(dict['sha-256'])
                 print(self.fields)
 
                 # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
