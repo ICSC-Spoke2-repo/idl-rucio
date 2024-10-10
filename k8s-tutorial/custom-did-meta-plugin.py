@@ -64,10 +64,6 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         super(CustomDidMetaPlugin, self).__init__()
         self.plugin_name = "IDL"
 
-        # AyraDB cluster INAF coordinates 
-        #ayradb_servers = [ {'ip': '95.217.130.33', 'port': 10021, 'name': 'ovqy400c' },
-        #                    {'ip': '37.27.21.168', 'port': 10021, 'name': 'wv98hjxd'} ]
-        
         # AyraDB cluster INFN coordinates
         self.ayradb_servers = [ {'ip': '65.109.166.225', 'port': 10021, 'name': 'bssm4u5y' }, 
                                {'ip': '95.216.170.67', 'port': 10021, 'name': 'g5joxu2z'} ] 
@@ -77,47 +73,51 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
         self.table_name = 'metadata'
 
-        # Fixed fields ONLY for testing!
-        self.fields = {
-            "IDL_L4_VERS": "0.5",
-            "LINK": ""
-        }
+        # Example metadata file for testing
+        # self.fields = {
+        #               "IDL_L4_VERS": "0.1",
+        #               "COMMENT": "FENGYUN 1C DEB",
+        #               "CREATION_DATE": "2024-09-14T00:00:00",
+        #               "ORIGINATOR": "CELESTRAK", 
+        #               "TIME_SYSTEM": "UTC",
+        #               "EPOCH": "2024-09-14T23:20:02.120928",
+        #               "PARTICIPANT_1": "NORAD",
+        #               "PARTICIPANT_2": "1999-025APG",
+        #               "PATH": "1,2,1",
+        #               "REFERENCE_FRAME": "EME2000",
+        #               "MEAS_TYPE": "ORBIT",
+        #               "MEAS_FORMAT": "KEP",
+        #               "MEAS_UNIT": "km, deg, deg, deg, deg",
+        #               "DATA_QUALITY": "L4",
+        #               "LINK": ""
+        #}
 
         # Field labels for the table dump in the internal warehouse of AyraDB (you can omit the fixed value labels)
-        self.field_labels_string = 'IDL_L4_VERS,LINK'
-
-    #def get_checksum(self, name, scope):
-    #    didc = DIDClient(account="luca", auth_type="userpass", rucio_host="https://rucio-server.131.154.98.24.myip.cloud.infn.it:443", 
-    #             auth_host="https://rucio-server.131.154.98.24.myip.cloud.infn.it:443", ca_cert="/etc/ssl/certs/ca-certificates.crt", 
-    #             creds={"username": "paciosel", "password": "password123"})
-    #
-    #    dict = didc.get_metadata(name=name, scope=scope)
-    #    
-    #    return dict['md5']
+        self.field_labels_string = 'IDL_L4_VERS,LINK' #'IDL_L4_VERS,COMMENT,CREATION_DATE,ORIGINATOR,TIME_SYSTEM,EPOCH,PARTICIPANT_1,PARTICIPANT_2,PATH,REFERENCE_FRAME,MEAS_TYPE,MEAS_FORMAT,MEAS_UNIT,DATA_QUALITY,LINK'
 
     def convert_bytearrays(self, data):
-            if isinstance(data, dict):
-                # Recursively process each key-value pair in the dictionary
-                return {keys: self.convert_bytearrays(values) for keys, values in data.items()}
-            elif isinstance(data, list):
-                # Recursively process each element in the list
-                return [self.convert_bytearrays(item) for item in data]
-            elif isinstance(data, bytearray):
+        if isinstance(data, dict):
+            # Recursively process each key-value pair in the dictionary
+            return {keys: self.convert_bytearrays(values) for keys, values in data.items()}
+        elif isinstance(data, list):
+            # Recursively process each element in the list
+            return [self.convert_bytearrays(item) for item in data]
+        elif isinstance(data, bytearray):
+            try:
+                # Attempt to decode the bytearray to a string
+                decoded_string = data.decode('utf-8')  # Change 'utf-8' if needed
+        
+                # Try to convert the string to a datetime object
                 try:
-                    # Attempt to decode the bytearray to a string
-                    decoded_string = data.decode('utf-8')  # Change 'utf-8' if needed
+                    # Adjust the format string as needed for your datetime format
+                   return datetime.strptime(decoded_string, '%Y-%m-%d %H:%M:%S.%f')
+                except ValueError:
+                    return decoded_string  # Return as string if it can't be parsed as datetime
             
-                    # Try to convert the string to a datetime object
-                    try:
-                        # Adjust the format string as needed for your datetime format
-                       return datetime.strptime(decoded_string, '%Y-%m-%d %H:%M:%S.%f')
-                    except ValueError:
-                        return decoded_string  # Return as string if it can't be parsed as datetime
-            
-                except UnicodeDecodeError:
-                    return str(data)  # Return as a string representation if decoding fails
-            else:
-                return data  # Return as is if it's not a bytearray, list, or dict 
+            except UnicodeDecodeError:
+                return str(data)  # Return as a string representation if decoding fails
+        else:
+            return data  # Return as is if it's not a bytearray, list, or dict 
 
     def set_metadata(self, scope: "InternalScope", name: str, key: str, value: str, 
                      recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
@@ -135,63 +135,30 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         if key == "JSON":
             try:
                 # Use this Python dict to add the DID, which is unique in Rucio, in the "LINK" field or, in general,to edit the fields if needed 
-                #dict = json.loads(value) 
-                #self.fields["sha256"] = dict['sha-256']
-                self.fields["LINK"] = f'{scope.internal}:{name}'
+                dict = json.loads(value) 
+                
+                self.fields = {keys: values for keys, values in dict.items() if keys != 'sha256'}
 
                 # Debug
-                #print(dict['sha-256'])
+                print(dict)
+                print('################################')
                 print(self.fields)
 
                 # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
                 key = adbc__generate_record_key_from_field(self.fields['LINK'])
-                
-                # Debug
-                print(key)
 
                 # Write the record
-                res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, 
-                                                                self.credentials, self.table_name, 
-                                                                    key, self.fields)
-            
-                # File name
-                #file_name = "tables_dumped.json"
-
-                # Check if file exists
-                #if os.path.exists(file_name):
-                #    print("File exists!")
-                    # File exists, read and update it
-                #    with open(file_name, "r") as json_file:
-                #        data = json.load(json_file)
-
-                    # # Append new tables to the existing list
-                    # if "tables" in data:
-                    #     data["tables"].extend(new_tables)  # Adding new tables to the existing list
-                    # else:
-                    #     data["tables"] = new_tables  # If "tables" key doesn't exist, create it
-                #else:
-                    # File doesn't exist, create a new one
-                #    data = {"tables": []}
-
-                #res_dump_table = False
-                # Dump table to internal warehouse
-                #if self.table_name not in data["tables"]:
+                res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.fields)
                 
+                # Dump of the metadata table to the internal warehouse (at the moment it can create some issues for the queries)
                 res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
-                
+                #res_dump_table, error_dump = adbc_1liner__dump_table_ild_metadata_to_warehouse(self.ayradb_servers, self.credentials)
+
                 # Check result of dumping table
                 if res_dump_table == False:
                    print(f'ERROR: dumping table: {error_dump}')
                 elif res_dump_table == True:
                    print('Successfully dumped the table!')
-                #   data["tables"].extend([self.table_name])
-
-                #with open(file_name, "w") as json_file:
-                #    json.dump(data, json_file, indent=4)
-
-                #print("################################")
-                #print(data["tables"])
-
 
                 # Check result of writing record
                 if res == False:
@@ -213,34 +180,21 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :param session: The database session in use
         :returns: the metadata for the did
         """
-        # Dump table to internal warehouse
-        #res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
-                
-        # Check result of dumping table
-        # if res_dump_table == False:
-        #     print(f'ERROR: dumping table: {error_dump}')
-        # elif res_dump_table == True:
-        #     print('Successfully dumped the table!')
-
         # Constant SQL query to retrieve the metadata of a DID
         const_sql_query = "SELECT * FROM ayradb.metadata WHERE LINK = '{}:{}';".format(scope.internal, name)
-        
+
         # Debug
         print(const_sql_query)
 
-        res, error, records = adbc_1liner__sql__wrapper(
-            self.ayradb_servers, self.credentials, 
-            const_sql_query, warehouse_query=True
-        )          
+        res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, const_sql_query, warehouse_query=True)          
 
         # Debug
         print(records)
-        print(type(records))
         print(records[0])
-        print(type(records[0]))
+        print(records[len(records)-1])
 
         # Convert the Python dict from bytearrays to strings
-        converted_dict = self.convert_bytearrays(records[0])
+        converted_dict = self.convert_bytearrays(records[len(records)-1])
 
         # Check result of getting the metadata for a DID
         if res == False:
@@ -259,10 +213,8 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         """
         # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
         key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, name))
-        
-        # Debug
-        print(key)
 
+        # Delete record from the SQL table
         res, error = adbc_1liner__delete_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key)
 
         # Check result of deleting the record

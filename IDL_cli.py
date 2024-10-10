@@ -77,8 +77,8 @@ class IDL():
             # Parse the JSON file in a Python dict and add the "DID" and "sha-256" metadata
             with open(meta, 'r') as m:
                 json_dict = json.load(m)
-                json_dict['DID'] = f'{did_scope}:{did_name}'
-                json_dict['sha-256'] = compute_sha256(file)
+                json_dict['LINK'] = f'{did_scope}:{did_name}'
+                json_dict['sha256'] = compute_sha256(file)
                 json_string = json.dumps(json_dict)
 
             # Set the metadata for the uploaded file
@@ -105,8 +105,8 @@ class IDL():
             # Parse the JSON file in a Python dict and add the "DID" and "sha-256" metadata
             with open(meta, 'r') as m:
                 json_dict = json.load(m)
-                json_dict['DID'] = f'{did_scope}:{did_name}'
-                json_dict['sha-256'] = compute_sha256(file)
+                json_dict['LINK'] = f'{did_scope}:{did_name}'
+                json_dict['sha256'] = compute_sha256(file)
                 json_string = json.dumps(json_dict)
 
             # Set the metadata for the file data
@@ -126,7 +126,7 @@ class IDL():
         did_scope = scope
         try:
             # Get the metadata for the specific DID
-            self.didc.get_metadata(scope=did_scope, name=did_name, plugin="IDL")
+            print(self.didc.get_metadata(scope=did_scope, name=did_name, plugin="IDL"))
 
         except Exception as e:
             print(f"Error: {e}")
