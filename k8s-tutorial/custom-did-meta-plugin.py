@@ -135,12 +135,12 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         if key == "JSON":
             try:
                 # Use this Python dict to add the DID, which is unique in Rucio, in the "LINK" field or, in general,to edit the fields if needed 
-                dict = json.loads(value) 
+                #dict = json.loads(value) 
                 #self.fields["sha256"] = dict['sha-256']
-                self.fields["LINK"] = dict['DID']
+                self.fields["LINK"] = f'{scope.internal}:{name}'
 
                 # Debug
-                print(dict['sha-256'])
+                #print(dict['sha-256'])
                 print(self.fields)
 
                 # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
