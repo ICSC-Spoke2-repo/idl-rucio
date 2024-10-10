@@ -34,7 +34,7 @@ def compute_sha256(file_path):
             hash_sha256.update(chunk)
     return hash_sha256.hexdigest()
 
-class Rucio4Leo():
+class IDL():
     def __init__(self):
         #self.scope = scope
         #self.rse = rse
@@ -91,11 +91,50 @@ class Rucio4Leo():
 
         except Exception as e:
             print(f"Error: {e}")
+    
+    def customSetMeta(self, scope, file, meta):
+        '''
+        Custom set-metadata: set-metadata from .json file if you need to edit the metadata of a DID
+
+        :param file: file path of the data file
+        :param meta: file path of the .json metadata file
+        '''
+        did_name = file.split('/')[-1] # Use the file name as the DID name
+        did_scope = scope
+        try:
+            # Parse the JSON file in a Python dict and add the "DID" and "sha-256" metadata
+            with open(meta, 'r') as m:
+                json_dict = json.load(m)
+                json_dict['DID'] = f'{did_scope}:{did_name}'
+                json_dict['sha-256'] = compute_sha256(file)
+                json_string = json.dumps(json_dict)
+
+            # Set the metadata for the file data
+            self.didc.set_metadata(scope=did_scope, name=did_name, key='JSON', value=json_string)
+
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    def customGetMeta(self, scope, file):
+        '''
+        Custom get-metadata: get-metadata of the specific DID for the custom plugin "IDL"
+
+        :param file: file path of the data file
+        :param meta: file path of the .json metadata file
+        '''
+        did_name = file.split('/')[-1] # Use the file name as the DID name
+        did_scope = scope
+        try:
+            # Get the metadata for the specific DID
+            self.didc.get_metadata(scope=did_scope, name=did_name, plugin="IDL")
+
+        except Exception as e:
+            print(f"Error: {e}")
 
 def main():
     # Setup argument parser
     parser = argparse.ArgumentParser(description="Custom upload: upload + set-metadata") # This is the description of the binary if you read the help message {-h, --help}
-    #parser.add_argument('--method', choices=['upload', 'download'], help='Method to call', required = True)
+    parser.add_argument('--method', choices=['upload', 'set', 'get'], help='Method to call', required = True)
     #parser.add_argument('--account', type=str, help='Account name')
     parser.add_argument('--scope', type=str, help='Scope')
     parser.add_argument('--rse', type=str, help='RSE expression')
@@ -106,13 +145,16 @@ def main():
     args = parser.parse_args()
 
     # Create an instance of MyClass
-    myClass = Rucio4Leo()
+    myClass = IDL()
 
     # Call the chosen method
-    #if args.method == 'upload':
-    myClass.customUpload(args.scope, args.file, args.meta, args.rse)
-    #elif args.method == 'download':
-    #    myClass.customDownload(args.message)
+    if args.method == 'upload':
+        myClass.customUpload(args.scope, args.file, args.meta, args.rse)
+    elif args.method == 'set':
+        myClass.customSetMeta(args.message)
+    elif args.method == 'get':
+        myClass.customGetMeta(args.message)
+
 
 if __name__ == "__main__":
     # Make a request to the service behind the Ingress
