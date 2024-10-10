@@ -30,7 +30,7 @@ from rucio.common import exception #import (AccountNotFound, Duplicate, RucioExc
 def compute_sha256(file_path):
     hash_sha256 = hashlib.sha256()
     with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
+        for chunk in iter(lambda: f.read(), b""):
             hash_sha256.update(chunk)
     return hash_sha256.hexdigest()
 
@@ -42,8 +42,8 @@ class IDL():
 
         self.didc = DIDClient()
         self.uplc = UploadClient()
-        self.repc = ReplicaClient()
-        self.rulesClient = RuleClient()
+        #self.repc = ReplicaClient()
+        #self.rulesClient = RuleClient()
         
         # Read account from the rucio.cfg in /opt/conda/envs/temp-rucio-env/etc/rucio.cfg
         config = configparser.ConfigParser()
@@ -133,7 +133,7 @@ class IDL():
 
 def main():
     # Setup argument parser
-    parser = argparse.ArgumentParser(description="Custom upload: upload + set-metadata") # This is the description of the binary if you read the help message {-h, --help}
+    parser = argparse.ArgumentParser(description="IDL client: upload (+ set-metadata), set-metadata, get-metadata with custom plugin") # This is the description of the binary if you read the help message {-h, --help}
     parser.add_argument('--method', choices=['upload', 'set', 'get'], help='Method to call', required = True)
     #parser.add_argument('--account', type=str, help='Account name')
     parser.add_argument('--scope', type=str, help='Scope')
@@ -144,16 +144,16 @@ def main():
     # Parse arguments
     args = parser.parse_args()
 
-    # Create an instance of MyClass
+    # Create an instance of IDL
     myClass = IDL()
 
     # Call the chosen method
     if args.method == 'upload':
         myClass.customUpload(args.scope, args.file, args.meta, args.rse)
     elif args.method == 'set':
-        myClass.customSetMeta(args.message)
+        myClass.customSetMeta(args.scope, args.file, args.meta)
     elif args.method == 'get':
-        myClass.customGetMeta(args.message)
+        myClass.customGetMeta(args.scope, args.file)
 
 
 if __name__ == "__main__":

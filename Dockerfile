@@ -34,8 +34,8 @@ RUN pip3 install argcomplete
 # Copy files in the image because I can move them as root from the Dockerfile
 COPY ./script_jhub.sh /opt/conda/script_jhub.sh
 RUN chmod a+x /opt/conda/script_jhub.sh
-COPY ./leonardo_upload.py /usr/bin/leonardo_upload.py
-RUN chmod a+x /usr/bin/leonardo_upload.py
+COPY ./IDL_cli.py /usr/bin/IDL_cli.py
+RUN chmod a+x /usr/bin/IDL_cli.py
 COPY ./cred.py /usr/bin/cred.py
 RUN chmod a+x /usr/bin/cred.py
 
