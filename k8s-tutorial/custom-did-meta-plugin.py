@@ -62,7 +62,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
     """
     def __init__(self):
         super(CustomDidMetaPlugin, self).__init__()
-        self.plugin_name = "RUCIO4LEO"
+        self.plugin_name = "IDL"
 
         # AyraDB cluster INAF coordinates 
         #ayradb_servers = [ {'ip': '95.217.130.33', 'port': 10021, 'name': 'ovqy400c' },
