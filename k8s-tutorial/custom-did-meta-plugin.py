@@ -93,7 +93,8 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         #}
 
         # Field labels for the table dump in the internal warehouse of AyraDB (you can omit the fixed value labels)
-        self.field_labels_string = 'IDL_L4_VERS,LINK' #'IDL_L4_VERS,COMMENT,CREATION_DATE,ORIGINATOR,TIME_SYSTEM,EPOCH,PARTICIPANT_1,PARTICIPANT_2,PATH,REFERENCE_FRAME,MEAS_TYPE,MEAS_FORMAT,MEAS_UNIT,DATA_QUALITY,LINK'
+        #self.field_labels_string = 'IDL_L4_VERS,LINK' 
+        self.field_labels_string = 'IDL_L4_VERS,COMMENT,CREATION_DATE,ORIGINATOR,TIME_SYSTEM,EPOCH,PARTICIPANT_1,PARTICIPANT_2,PATH,REFERENCE_FRAME,MEAS_TYPE,MEAS_FORMAT,MEAS_UNIT,DATA_QUALITY,LINK'
 
     def convert_bytearrays(self, data):
         if isinstance(data, dict):
@@ -181,7 +182,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :returns: the metadata for the did
         """
         # Constant SQL query to retrieve the metadata of a DID
-        const_sql_query = "SELECT * FROM ayradb.metadata WHERE LINK = '{}:{}';".format(scope.internal, name)
+        const_sql_query = f"SELECT * FROM ayradb.metadata WHERE LINK='{scope.internal}:{name}';"
 
         # Debug
         print(const_sql_query)
