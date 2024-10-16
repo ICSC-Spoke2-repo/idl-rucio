@@ -95,7 +95,10 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         # Field labels for the table dump in the internal warehouse of AyraDB (you can omit the fixed value labels)
         #self.field_labels_string = 'IDL_L4_VERS,LINK' 
         self.field_labels_string = 'IDL_L4_VERS,COMMENT,CREATION_DATE,ORIGINATOR,TIME_SYSTEM,EPOCH,PARTICIPANT_1,PARTICIPANT_2,PATH,REFERENCE_FRAME,MEAS_TYPE,MEAS_FORMAT,MEAS_UNIT,DATA_QUALITY,LINK'
-
+        ########## blockchain ##################
+        # self.blockchainUrl = "https://131.154.99.190:3000"
+        # self.headers = {"content-type": "application/x-www-form-urlencoded"}
+        ########################################
     def convert_bytearrays(self, data):
         if isinstance(data, dict):
             # Recursively process each key-value pair in the dictionary
@@ -166,6 +169,10 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                     print(f'ERROR: writing a record: {error}')
                 elif res == True:
                     print('Successfully wrote the metadata!')
+
+                    ######## blockchain ###########
+                    # set_blockchain(self, value)
+                    ###############################
                 
             except Exception as e:
                 print(f"Error reading JSON file: {e}")
@@ -289,3 +296,72 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :returns: The name of the plugin
         """
         return self.plugin_name
+# ####### blockchain ###########
+#   def manage_request(self, callType, functionName, args):
+#     params = {
+#         "channelid": "mychannel",
+#         "chaincodeid": "basic",
+#         "function": functionName,
+#         "args": args,
+#     }
+#     try:
+#         res = requests.get(
+#             f"{self.blockchainUrl}/{callType}", headers=self.headers, params=params
+#         )
+
+#         if res.status_code == 200:
+#             return {
+#                 "message": res.text,
+#                 "status": 200,
+#             }
+#         return {
+#             "message": "Error",
+#             "status": res.status_code,
+#         }
+#     except requests.exceptions.ConnectionError:
+#         return {
+#             "message": "Error contacting the server",
+#             "status": 503,
+#         }
+
+
+#   def set_blockchain(self, value: str):
+#     dict = json.loads(value)
+#     data_hash = dict["sha256"]
+
+#     metadata_hash = adbc__generate_record_key_from_field(str(self.fields))
+#     # LINK ex DID
+#     DID = dict["LINK"]
+
+#     args_createDataset = [
+#         data_hash,
+#         metadata_hash,
+#         DID,
+#     ]
+#     response = manage_request(
+#         call="invoke",
+#         function="CreateDataset",
+#         args=args_createDataset,
+#         headers=self.headers,
+#     )
+#     return response
+
+
+#   def get_from_blockchain(data_hash, metadata_hash):
+
+#     response = manage_request("query", args=[data_hash], function="ReadDataset")
+#     message = response["message"]
+#     if "not exist" in message:
+#         return "Hash is not present in blockchain"
+#     # respons_operation = manage_request("query", args=[operationHash], function="ReadOperation")
+#     asset = json.loads(message[10:])
+#     if validate_data(asset, metadata_hash):
+#         return asset
+#     else:
+#         return "The metadata hash is not the same"
+
+
+#   def validate_data(asset, metadata_hash):
+#     if isinstance(asset, dict) and asset["MetadataHash"] == metadata_hash:
+#         return True
+#     return False
