@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+############################################################################################################
+# For the following didmeta plugin to work correctly, it must be used with the IDL API Client (IDL_cli.py) #
+############################################################################################################
+
 # Includes for AyraDB connection
 import random
 import string
@@ -25,6 +29,7 @@ from adbc.core.adbc import adbc_1liner__dump_table_to_warehouse__wrapper
 from adbc.core.adbc import adbc_1liner__dump_table_ild_metadata_to_warehouse
 from adbc.core.adbc import adbc__generate_record_key_from_field
 
+# For conversion of metadata CREATION_DATE and EPOCH
 from datetime import datetime
 
 # Old includes for postgres did-meta plugin
@@ -44,8 +49,9 @@ from rucio.db.sqla import models
 from rucio.db.sqla.constants import DIDType
 from sqlalchemy.sql.expression import true
 
-# Import to get the checksum/hash of the data file for blockchain
+# Includes to get the checksum/hash of the data file for blockchain and for communication with blockchain
 from rucio.client.didclient import DIDClient
+import requests
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -68,37 +74,40 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         self.ayradb_servers = [ {'ip': '65.109.166.225', 'port': 10021, 'name': 'bssm4u5y' }, 
                                {'ip': '95.216.170.67', 'port': 10021, 'name': 'g5joxu2z'} ] 
 
-        # INFN cluster credentials
+        # INFN cluster credentials (TO BE HIDDEN IN SOME WAY)
         self.credentials = {'username': 'infn1', 'password': 'Gelat0AlTamar1nd0'}
 
         self.table_name = 'metadata'
 
-        # Example metadata file for testing
-        # self.fields = {
-        #               "IDL_L4_VERS": "0.1",
-        #               "COMMENT": "FENGYUN 1C DEB",
-        #               "CREATION_DATE": "2024-09-14T00:00:00",
-        #               "ORIGINATOR": "CELESTRAK", 
-        #               "TIME_SYSTEM": "UTC",
-        #               "EPOCH": "2024-09-14T23:20:02.120928",
-        #               "PARTICIPANT_1": "NORAD",
-        #               "PARTICIPANT_2": "1999-025APG",
-        #               "PATH": "1,2,1",
-        #               "REFERENCE_FRAME": "EME2000",
-        #               "MEAS_TYPE": "ORBIT",
-        #               "MEAS_FORMAT": "KEP",
-        #               "MEAS_UNIT": "km, deg, deg, deg, deg",
-        #               "DATA_QUALITY": "L4",
-        #               "LINK": ""
-        #}
+# Example metadata file for testing
+# {
+#     "IDL_L4_VERS": "0.1",
+#     "COMMENT": "FENGYUN 1C DEB",
+#     "CREATION_DATE": "2024-09-14T00:00:00",
+#     "ORIGINATOR": "CELESTRAK", 
+#     "TIME_SYSTEM": "UTC",
+#     "EPOCH": "2024-09-14T23:20:02.120928",
+#     "PARTICIPANT_1": "NORAD",
+#     "PARTICIPANT_2": "1999-025APG",
+#     "PATH": "1,2,1",
+#     "REFERENCE_FRAME": "EME2000",
+#     "MEAS_TYPE": "ORBIT",
+#     "MEAS_FORMAT": "KEP",
+#     "MEAS_UNIT": "km, deg, deg, deg, deg",
+#     "DATA_QUALITY": "L4",
+#     "LINK": ""
+# }
 
         # Field labels for the table dump in the internal warehouse of AyraDB (you can omit the fixed value labels)
         #self.field_labels_string = 'IDL_L4_VERS,LINK' 
         self.field_labels_string = 'IDL_L4_VERS,COMMENT,CREATION_DATE,ORIGINATOR,TIME_SYSTEM,EPOCH,PARTICIPANT_1,PARTICIPANT_2,PATH,REFERENCE_FRAME,MEAS_TYPE,MEAS_FORMAT,MEAS_UNIT,DATA_QUALITY,LINK'
+        
         ########## blockchain ##################
-        # self.blockchainUrl = "https://131.154.99.190:3000"
-        # self.headers = {"content-type": "application/x-www-form-urlencoded"}
+        self.blockchainUrl = "https://vm-131-154-99-190.cloud.cnaf.infn.it:3000"
+        self.headers = {"content-type": "application/x-www-form-urlencoded"}
         ########################################
+
+    # Method to convert results of the DB queries into strings
     def convert_bytearrays(self, data):
         if isinstance(data, dict):
             # Recursively process each key-value pair in the dictionary
@@ -114,7 +123,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 # Try to convert the string to a datetime object
                 try:
                     # Adjust the format string as needed for your datetime format
-                   return datetime.strptime(decoded_string, '%Y-%m-%d %H:%M:%S.%f')
+                   return datetime.strptime(decoded_string, '%Y-%m-%dT%H:%M:%S.%f')
                 except ValueError:
                     return decoded_string  # Return as string if it can't be parsed as datetime
             
@@ -144,9 +153,13 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 self.fields = {keys: values for keys, values in dict.items() if keys != 'sha256'}
 
                 # Debug
-                print(dict)
-                print('################################')
-                print(self.fields)
+                #print(dict)
+                #print('################################')
+                #print(self.fields)
+                #print('################################')
+                #print(str(self.fields))
+                #print('################################')
+
 
                 # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
                 key = adbc__generate_record_key_from_field(self.fields['LINK'])
@@ -170,9 +183,14 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 elif res == True:
                     print('Successfully wrote the metadata!')
 
-                    ######## blockchain ###########
-                    # set_blockchain(self, value)
-                    ###############################
+                ######## blockchain ###########
+                try:
+                    self.set_blockchain(value)
+                except:
+                    # Exception management to avoid internal errors due to possible blockchain server errors
+                    print('ERROR: contacting blockchain')
+                
+                ###########################
                 
             except Exception as e:
                 print(f"Error reading JSON file: {e}")
@@ -188,22 +206,54 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :param session: The database session in use
         :returns: the metadata for the did
         """
+        # For now, I am passing the hash_data and did_name in the argument "name" in the Client as "{hash_data}:{did_name}". Here in the plugin I split the two infos
+        hash_data = name.split(':')[0]
+        clean_name = name.split(':')[1]
+        
         # Constant SQL query to retrieve the metadata of a DID
-        const_sql_query = f"SELECT * FROM ayradb.metadata WHERE LINK='{scope.internal}:{name}';"
+        const_sql_query = f"SELECT * FROM ayradb.metadata WHERE LINK='{scope.internal}:{clean_name}';"
 
         # Debug
-        print(const_sql_query)
+        #print(const_sql_query)
 
         res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, const_sql_query, warehouse_query=True)          
 
         # Debug
-        print(records)
-        print(records[0])
-        print(records[len(records)-1])
+        #print(records)
 
         # Convert the Python dict from bytearrays to strings
         converted_dict = self.convert_bytearrays(records[len(records)-1])
 
+        # Clean the LINK from the '\n' special character which it "gains" from the DB 
+        converted_dict['LINK'] = converted_dict['LINK'][:-1]
+
+        # Debug
+        #print('###############################')
+        #print(str(converted_dict))
+        #print('###############################')
+
+        ######## blockchain ###########
+        # Computation of metadata_hash for the get_from_blockchain method  
+        metahash_dict = {keys: values for keys, values in converted_dict.items() if keys != 'id'}
+
+        #print(metahash_dict)
+
+        #string = metahash_dict["EPOCH"]
+        #metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
+        #metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
+
+        metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
+
+        #print(metahash_dict)
+
+        try: 
+            print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash)) 
+        except:
+            # Exception management to avoid internal errors due to possible blockchain server errors
+            print('ERROR: contacting blockchain')
+        
+        ###########################
+            
         # Check result of getting the metadata for a DID
         if res == False:
             print(f'ERROR: retrieving the metadata: {error}')
@@ -231,13 +281,13 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         elif res == True:
             print('Successfully deleted record')
         
-        #res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
+        res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
                 
         # Check result of dumping table
-        #if res_dump_table == False:
-        #    print(f'ERROR: dumping table: {error_dump}')
-        #elif res_dump_table == True:
-        #    print('Successfully dumped the table!')
+        if res_dump_table == False:
+            print(f'ERROR: dumping table: {error_dump}')
+        elif res_dump_table == True:
+            print('Successfully dumped the table!')
 
     def list_dids(self, scope, filters, did_type='all', ignore_case=False, limit=None, 
                   offset=None, long=False, recursive=False, ignore_dids=None, *, session: "Optional[Session]" = None):
@@ -247,8 +297,73 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             filters = [filters]
 
         # Debug
-        print(filters)
-        print(type(filters))
+        #print(filters)
+        #print(type(filters))
+
+        # Build SQL query
+        def build_sql_query(filter):
+            conditions = []
+            for filter_dict in filter:
+                and_conditions = []
+                for key, value in filter_dict.items():
+                    if key != 'name':
+                        if '.' in key:
+                            field, operator = key.split(".")
+                            # Map back to the actual SQL operators
+                            operator_map = {
+                                'gte': '>=',
+                                'lte': '<=',
+                                'gt': '>',
+                                'lt': '<',
+                                'ne': '!='
+                            }
+                            sql_operator = operator_map[operator]
+                        else:
+                            field = key
+                            sql_operator = '='
+                        and_conditions.append(f"{field}{sql_operator}'{value}'")
+                    else:
+                        pass
+                conditions.append(f"{' AND '.join(and_conditions)}")
+    
+            # Join OR conditions
+            where_clause = ' OR '.join(conditions)
+            query = f"SELECT LINK FROM ayradb.metadata WHERE {where_clause};"
+            return query
+
+        query = build_sql_query(filters)
+
+        # Debug
+        #print(query)
+
+        res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, query, warehouse_query=True)          
+
+        # Debug
+        #print(records)
+        #print(records[0])
+        #print(records[len(records)-1])
+
+        # Convert the Python dicts from bytearrays to strings and append to a list
+        results = []
+        for dicts in records:
+            converted_dict = self.convert_bytearrays(dicts)
+            #print(converted_dict['LINK'])
+            #print('##########################')
+            #print(converted_dict['LINK'].split(':'))
+            #print('##########################')
+            #print(converted_dict['LINK'].split(':')[0])
+            #print('##########################')
+            #print(f"{scope}")
+            if converted_dict['LINK'].split(':')[0] == f"{scope}":
+                results.append(converted_dict)
+
+        #print(results)
+
+        # Check result of getting the metadata for a DID
+        if res == False:
+            print(f'ERROR: listing the DIDs: {error}')
+        elif res == True:
+            return results
 
         #try:
             # instantiate fe and create SQL query
@@ -283,7 +398,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         #    return res_list
 
         # For now we return a NotImplementedError
-        return f'ERROR: error getting list of dids: NotImplementedError'
+        #return f'ERROR: error getting list of dids: NotImplementedError'
 
     def manages_key(self, key, *, session: "Optional[Session]" = None):
         return True
@@ -296,72 +411,76 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :returns: The name of the plugin
         """
         return self.plugin_name
-# ####### blockchain ###########
-#   def manage_request(self, callType, functionName, args):
-#     params = {
-#         "channelid": "mychannel",
-#         "chaincodeid": "basic",
-#         "function": functionName,
-#         "args": args,
-#     }
-#     try:
-#         res = requests.get(
-#             f"{self.blockchainUrl}/{callType}", headers=self.headers, params=params
-#         )
 
-#         if res.status_code == 200:
-#             return {
-#                 "message": res.text,
-#                 "status": 200,
-#             }
-#         return {
-#             "message": "Error",
-#             "status": res.status_code,
-#         }
-#     except requests.exceptions.ConnectionError:
-#         return {
-#             "message": "Error contacting the server",
-#             "status": 503,
-#         }
+####### blockchain ###########
+    def manage_request(self, callType, functionName, args):
+        params = {
+            "channelid": "mychannel",
+            "chaincodeid": "basic",
+            "function": functionName,
+            "args": args,
+        }
+        try:
+            res = requests.get(
+                f"{self.blockchainUrl}/{callType}", headers=self.headers, params=params
+            )
 
-
-#   def set_blockchain(self, value: str):
-#     dict = json.loads(value)
-#     data_hash = dict["sha256"]
-
-#     metadata_hash = adbc__generate_record_key_from_field(str(self.fields))
-#     # LINK ex DID
-#     DID = dict["LINK"]
-
-#     args_createDataset = [
-#         data_hash,
-#         metadata_hash,
-#         DID,
-#     ]
-#     response = manage_request(
-#         call="invoke",
-#         function="CreateDataset",
-#         args=args_createDataset,
-#         headers=self.headers,
-#     )
-#     return response
+            if res.status_code == 200:
+                return {
+                    "message": res.text,
+                    "status": 200,
+                }
+            return {
+                "message": "Error",
+                "status": res.status_code,
+            }
+        except requests.exceptions.ConnectionError:
+            return {
+                "message": "Error contacting the server",
+                "status": 503,
+            }
 
 
-#   def get_from_blockchain(data_hash, metadata_hash):
+    def set_blockchain(self, value: str):
+        dict = json.loads(value)
+        data_hash = dict["sha256"]
 
-#     response = manage_request("query", args=[data_hash], function="ReadDataset")
-#     message = response["message"]
-#     if "not exist" in message:
-#         return "Hash is not present in blockchain"
-#     # respons_operation = manage_request("query", args=[operationHash], function="ReadOperation")
-#     asset = json.loads(message[10:])
-#     if validate_data(asset, metadata_hash):
-#         return asset
-#     else:
-#         return "The metadata hash is not the same"
+        self.fields = {keys: values for keys, values in dict.items() if keys != 'sha256'}
+
+        metadata_hash = adbc__generate_record_key_from_field(str(self.fields))
+        # LINK ex DID
+        DID = dict["LINK"]
+
+        args_createDataset = [
+            data_hash,
+            metadata_hash,
+            DID
+        ]
+        response = self.manage_request(
+            callType="invoke",
+            functionName="CreateDataset",
+            args=args_createDataset,
+        #    headers=self.headers,
+        )
+        return response
+
+    def validate_data(self, asset, metadata_hash):
+        if isinstance(asset, dict) and asset["metadataHash"] == metadata_hash:
+            return True
+        return False
+    
+    def get_from_blockchain(self, data_hash, metadata_hash):
+
+        response = self.manage_request(callType="query", args=[data_hash], functionName="ReadDataset")
+        message = response["message"]
+        if "not exist" in message:
+            print("Hash is not present in blockchain")
+        # respons_operation = manage_request("query", args=[operationHash], function="ReadOperation")
+        asset = json.loads(message[10:])
+        if self.validate_data(asset, metadata_hash):
+            return asset
+        else:
+            print("The metadata hash is not the same")
 
 
-#   def validate_data(asset, metadata_hash):
-#     if isinstance(asset, dict) and asset["MetadataHash"] == metadata_hash:
-#         return True
-#     return False
+
