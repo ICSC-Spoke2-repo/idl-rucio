@@ -210,7 +210,7 @@ class IDL():
             max_list_len = len(str(abs(len(res))))
             for d in res:
                 for result in list(d.values()):
-                    result = result[:-2]
+                    result = result[:-1]
                     print(f"{i}:".ljust(max_list_len + 1) + f"  {result}")
                     i = i + 1
         except Exception as e:
