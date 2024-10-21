@@ -302,12 +302,12 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         
         # I am passing the SELECTs in the filters in the Client as a list in the list of dicts that is the filters. Here in the plugin I split the two infos
         select_list = [elem for elem in filters if 'sql_select' in elem]
-        print(select_list)
+        # print(select_list)
         select = select_list[0]['sql_select']
-        print(select)
+        # print(select)
 
         filters = [elem for elem in filters if 'sql_select' not in elem]
-        print(filters)
+        # print(filters)
 
         # Build SQL query
         def build_sql_query(filter):
@@ -343,26 +343,26 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         query = build_sql_query(filters)
 
         # Debug
-        print(query)
+        # print(query)
 
         res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, query, warehouse_query=True)          
 
         # Debug
-        print(records)
-        print(records[0])
-        print(records[len(records)-1])
+        # print(records)
+        # print(records[0])
+        # print(records[len(records)-1])
 
         # Convert the Python dicts from bytearrays to strings and append to a list
         results = []
         for dicts in records:
             converted_dict = self.convert_bytearrays(dicts)
-            print(converted_dict['LINK'])
-            print('##########################')
-            print(converted_dict['LINK'].split(':'))
-            print('##########################')
-            print(converted_dict['LINK'].split(':')[0])
-            print('##########################')
-            print(f"{scope}")
+            # print(converted_dict['LINK'])
+            # print('##########################')
+            # print(converted_dict['LINK'].split(':'))
+            # print('##########################')
+            # print(converted_dict['LINK'].split(':')[0])
+            # print('##########################')
+            # print(f"{scope}")
             if converted_dict['LINK'].split(':')[0] == f"{scope}":
                 results.append(converted_dict)
 
