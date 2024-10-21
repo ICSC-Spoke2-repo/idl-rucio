@@ -3,8 +3,8 @@ authReplicaCount: 0
 traceReplicaCount: 0
 
 image:
-  repository: rucio/rucio-server
-  tag: release-34.5.0
+  repository: rucio/rucio-server #lucapacioselli/rucio-server
+  tag: release-34.5.0 #v1.0.0
 
 #configMap:
 #  name: policy-package
