@@ -47,6 +47,44 @@ def compute_sha256(file_path):
             hash_sha256.update(chunk)
     return hash_sha256.hexdigest()
 
+# Function to map operators to corresponding SQL-friendly keys
+def get_operator_key(field, operator):
+    if operator != '=':
+        operator_map = {
+            '>=': 'gte',
+            '<=': 'lte',
+            '>': 'gt',
+            '<': 'lt',
+            '!=': 'ne',
+        }
+        return f"{field}.{operator_map[operator]}"
+    else:
+        return f"{field}"
+
+# Function to parse filters from string with logical operators AND, OR to a list of dicts as in rucio's filter engine
+def parse_filters(input_str):
+    # Split by WORD "OR", to create separate dicts for OR conditions, avoiding splitting words like "ORIGINATOR"
+    or_conditions = re.split(r'\bOR\b', input_str)
+    filters = []
+
+    for or_cond in or_conditions:
+        # Same as for the "OR"
+        and_conditions = re.split(r'\bAND\b', or_cond)
+        and_dict = {}
+        
+        for cond in and_conditions:
+            # Regex to capture key, operator, and value
+            match = re.match(r'(\w+)\s*(>=|<=|!=|>|<|=)\s*([^\s]+)', cond.strip())
+            
+            if match:
+                field, operator, value = match.groups()
+                operator_key = get_operator_key(field, operator)
+                and_dict[operator_key] = value.strip()
+        
+        filters.append(and_dict)
+
+    return filters
+
 class IDL():
     def __init__(self):
         #self.scope = scope
@@ -163,42 +201,6 @@ class IDL():
     def customListDids(self, scope, filters):
         #did_name = file.split('/')[-1] # Use the file name as the DID name
         did_scope = scope
-        # Function to map operators to corresponding SQL-friendly keys
-        def get_operator_key(field, operator):
-            if operator != '=':
-                operator_map = {
-                    '>=': 'gte',
-                    '<=': 'lte',
-                    '>': 'gt',
-                    '<': 'lt',
-                    '!=': 'ne',
-                }
-                return f"{field}.{operator_map[operator]}"
-            else:
-                return f"{field}"
-
-        # Function to parse filters
-        def parse_filters(input_str):
-            # Split by OR (to create separate dicts for OR conditions)
-            or_conditions = input_str.split('OR')
-            filters = []
-
-            for or_cond in or_conditions:
-                and_conditions = or_cond.split('AND')
-                and_dict = {}
-        
-                for cond in and_conditions:
-                    # Regex to capture key, operator, and value
-                    match = re.match(r'(\w+)\s*(>=|<=|!=|>|<|=)\s*([^\s]+)', cond.strip())
-            
-                    if match:
-                        field, operator, value = match.groups()
-                        operator_key = get_operator_key(field, operator)
-                        and_dict[operator_key] = value.strip()
-        
-                filters.append(and_dict)
-
-            return filters
         try:
             filters = parse_filters(filters)
             for fil in filters:
@@ -206,27 +208,56 @@ class IDL():
                     if key.startswith("EPOCH") or key.startswith("CREATION_DATE"):
                         value = np.datetime64(f'{value}')
             i = 1
+            # For now, I'm passing the SELECTs to the plugin via the filters
+            select_dict = {'sql_select': 'LINK'}
+            filters.append(select_dict)
             res = list(self.didc.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False))
             max_list_len = len(str(abs(len(res))))
             for d in res:
-                for result in list(d.values()):
-                    result = result[:-1]
-                    print(f"{i}:".ljust(max_list_len + 1) + f"  {result}")
-                    i = i + 1
+                for key in d.keys():
+                    if key == 'LINK':
+                        d['LINK'] = d['LINK'][:-1]
+                print(f"{i}:".ljust(max_list_len + 1) + f"{json.dumps(d, indent=4)}\n")
+                i = i + 1
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def customQuery(self, scope, select, filters):
+        #did_name = file.split('/')[-1] # Use the file name as the DID name
+        did_scope = scope
+        try:
+            filters = parse_filters(filters)
+            for fil in filters:
+                for key, value in fil.items():
+                    if key.startswith("EPOCH") or key.startswith("CREATION_DATE"):
+                        value = np.datetime64(f'{value}')
+            i = 1
+            # For now, I'm passing the SELECTs to the plugin via the filters
+            select_dict = {'sql_select': select + ', LINK'}
+            filters.append(select_dict)
+            res = list(self.didc.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False))
+            max_list_len = len(str(abs(len(res))))
+            for d in res:
+                for key in d.keys():
+                    if key == 'LINK':
+                        d['LINK'] = d['LINK'][:-1]
+                print(f"{i}:".ljust(max_list_len + 1) + f"{json.dumps(d, indent=4)}\n")
+                i = i + 1
         except Exception as e:
             print(f"Error: {e}")
             
 
 def main():
     # Setup argument parser
-    parser = argparse.ArgumentParser(description="IDL client: upload (+ set-metadata), set-metadata, get-metadata with custom plugin") # This is the description of the binary if you read the help message {-h, --help}
-    parser.add_argument('--method', choices=['upload', 'set', 'get', 'list'], help='Method to call', required = True)
+    parser = argparse.ArgumentParser(description="IDL client: upload (+ set-metadata), set-metadata, get-metadata and SQL queries with custom plugin") # This is the description of the binary if you read the help message {-h, --help}
+    parser.add_argument('--method', choices=['upload', 'set', 'get', 'list', 'sql'], help='Method to call', required = True)
     #parser.add_argument('--account', type=str, help='Account name')
     parser.add_argument('--scope', type=str, help='Scope')
     parser.add_argument('--rse', type=str, help='RSE expression')
     parser.add_argument('--file', type=str, help='File path of the data file')
     parser.add_argument('--meta', type=str, help='File path of the metadata .json file')
     parser.add_argument('--filters', type=str, help='Filters for the list-dids')
+    parser.add_argument('--select', type=str, help='SELECTs for SQL queries')
 
     # Parse arguments
     args = parser.parse_args()
@@ -243,6 +274,8 @@ def main():
         myClass.customGetMeta(args.scope, args.file)
     elif args.method == 'list':
         myClass.customListDids(args.scope, args.filters) #ast.literal_eval(args.filters))
+    elif args.method == 'sql':
+        myClass.customQuery(args.scope, args.select, args.filters)
 
 
 if __name__ == "__main__":
