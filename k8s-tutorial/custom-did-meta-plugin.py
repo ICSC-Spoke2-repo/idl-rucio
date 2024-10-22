@@ -93,7 +93,6 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         config.read('/tmp/AyraDB_cluster_credentials.cfg')
 
         # AyraDB cluster INFN coordinates
-        #self.ayradb_servers = [ {"ip": "140.105.79.121", "port": 10021, "name": "idlserv1" }, {"ip": "140.105.79.122", "port": 10021, "name": "idlserv2"} ]        
         self.ayradb_servers = [ {
                 "ip": config.get('server1', 'ip'),
                 "port": int(config.get('server1', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
@@ -107,7 +106,6 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         ]
 
         # INFN cluster credentials
-        #self.credentials = {"username": "infn1", "password": "Gelat0AlTamar1nd0"}
         self.credentials = { "username": config.get('credentials', 'username'), "password": config.get('credentials', 'password')}
 
 
