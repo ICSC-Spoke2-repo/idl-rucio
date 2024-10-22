@@ -188,13 +188,8 @@ class IDL():
             # Print the resulting dict in the same format as the rucio get-metadata
             max_key_length = max(len(key) for key in dict.keys())
             for keys, values in dict.items():
-                #if keys != 'LINK':
-                    # Left-align the keys by as many characters as the longest key + 1
                 print(f"{keys}:".ljust(max_key_length + 1) + f"  {values}")
-                #else:
-                    # Strip the "\n" at the end of LINK
-                #    formatted_link = values[:-2]
-                #    print(f"{keys}:".ljust(max_key_length + 1) + f"  {formatted_link}")
+
         except Exception as e:
             print(f"Error: {e}")
     
@@ -238,9 +233,9 @@ class IDL():
             res = list(self.didc.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False))
             max_list_len = len(str(abs(len(res))))
             for d in res:
-                for key in d.keys():
-                    if key == 'LINK':
-                        d['LINK'] = d['LINK'][:-1]
+                # for key in d.keys():
+                #     if key == 'LINK':
+                #         d['LINK'] = d['LINK'][:-1]
                 print(f"{i}:".ljust(max_list_len + 1) + f"{json.dumps(d, indent=4)}\n")
                 i = i + 1
         except Exception as e:
@@ -249,8 +244,8 @@ class IDL():
 
 def main():
     # Setup argument parser
-    parser = argparse.ArgumentParser(description="IDL client: upload (+ set-metadata), set-metadata, get-metadata and SQL queries with custom plugin") # This is the description of the binary if you read the help message {-h, --help}
-    parser.add_argument('--method', choices=['upload', 'set', 'get', 'list', 'sql'], help='Method to call', required = True)
+    parser = argparse.ArgumentParser(description="IDL client: upload (+ set-metadata), get-metadata and SQL queries with custom plugin") # This is the description of the binary if you read the help message {-h, --help}
+    parser.add_argument('--method', choices=['upload', 'get', 'list', 'sql'], help='Method to call', required = True)
     #parser.add_argument('--account', type=str, help='Account name')
     parser.add_argument('--scope', type=str, help='Scope')
     parser.add_argument('--rse', type=str, help='RSE expression')

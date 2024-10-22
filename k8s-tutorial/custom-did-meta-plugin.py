@@ -93,10 +93,22 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         config.read('/tmp/AyraDB_cluster_credentials.cfg')
 
         # AyraDB cluster INFN coordinates
-        self.ayradb_servers = config.get('coordinates', 'servers')
+        #self.ayradb_servers = [ {"ip": "140.105.79.121", "port": 10021, "name": "idlserv1" }, {"ip": "140.105.79.122", "port": 10021, "name": "idlserv2"} ]        
+        self.ayradb_servers = [ {
+                "ip": config.get('server1', 'ip'),
+                "port": int(config.get('server1', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+                "name": config.get('server1', 'name')
+            },
+            {
+                "ip": config.get('server2', 'ip'),
+                "port": int(config.get('server2', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+                "name": config.get('server2', 'name')
+            }
+        ]
 
         # INFN cluster credentials
-        self.credentials = config.get('credentials', 'cred')
+        #self.credentials = {"username": "infn1", "password": "Gelat0AlTamar1nd0"}
+        self.credentials = { "username": config.get('credentials', 'username'), "password": config.get('credentials', 'password')}
 
 
         self.table_name = 'metadata'
@@ -171,27 +183,39 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             try:
                 # Use this Python dict to add the DID, which is unique in Rucio, in the "LINK" field or, in general,to edit the fields if needed 
                 dict = json.loads(value) 
+
+                print(value)
+                print(type(value))
                 
                 self.fields = {keys: values for keys, values in dict.items() if keys != 'sha256'}
 
                 # Debug
-                #print(dict)
-                #print('################################')
-                #print(self.fields)
-                #print('################################')
-                #print(str(self.fields))
-                #print('################################')
-
+                print(dict)
+                print(type(dict))
+                print('################################')
+                print(self.fields)
+                print(type(self.fields))
+                print('################################')
 
                 # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
                 key = adbc__generate_record_key_from_field(self.fields['LINK'])
 
+                print(key)
+                print(type(key))
+
                 # Write the record
-                res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.fields)
-                
+                error = None
+                try:
+                    res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.fields)
+                except:
+                    print(f'{error}')
+                #print(res)
+
                 # Dump of the metadata table to the internal warehouse (at the moment it can create some issues for the queries)
                 res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
                 #res_dump_table, error_dump = adbc_1liner__dump_table_ild_metadata_to_warehouse(self.ayradb_servers, self.credentials)
+
+                print(res_dump_table)
 
                 # Check result of dumping table
                 if res_dump_table == False:
@@ -215,7 +239,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 ###########################
                 
             except Exception as e:
-                print(f"Error reading JSON file: {e}")
+                print(f"ERROR: {e}")
         else:
             print("Key must be 'JSON'")
 
@@ -236,29 +260,26 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         const_sql_query = f"SELECT * FROM ayradb.metadata WHERE LINK='{scope.internal}:{clean_name}';"
 
         # Debug
-        #print(const_sql_query)
+        print(const_sql_query)
 
         res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, const_sql_query, warehouse_query=True)          
 
         # Debug
-        #print(records)
+        print(records)
 
         # Convert the Python dict from bytearrays to strings
         converted_dict = self.convert_bytearrays(records[len(records)-1])
 
-        # Clean the LINK from the '\n' special character which it "gains" from the DB 
-        converted_dict['LINK'] = converted_dict['LINK'][:-1]
-
         # Debug
-        #print('###############################')
-        #print(str(converted_dict))
-        #print('###############################')
+        print('###############################')
+        print(str(converted_dict))
+        print('###############################')
 
         ######## blockchain ###########
         # Computation of metadata_hash for the get_from_blockchain method  
         metahash_dict = {keys: values for keys, values in converted_dict.items() if keys != 'id'}
 
-        #print(metahash_dict)
+        print(metahash_dict)
 
         #string = metahash_dict["EPOCH"]
         #metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
@@ -266,7 +287,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
         metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
 
-        #print(metahash_dict)
+        print(metahash_dict)
 
         try: 
             print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash)) 
