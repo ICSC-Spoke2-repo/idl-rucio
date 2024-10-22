@@ -95,7 +95,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         # AyraDB cluster INFN coordinates
         self.ayradb_servers = config.get('coordinates', 'servers')
 
-        # INFN cluster credentials (TO BE HIDDEN IN SOME WAY)
+        # INFN cluster credentials
         self.credentials = config.get('credentials', 'cred')
 
 
