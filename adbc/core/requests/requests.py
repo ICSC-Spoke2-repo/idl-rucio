@@ -6,65 +6,87 @@ import sys
 from typing import Optional, Dict, Any, List
 from adbc.core.http.http import HTTP_header, HTTP_method, HTTP_method_name, HTTPMessage, HTTP_message_type, HTTP_connection, create_authorization_header_value
 
+verbose = False
+
 class Request_type(Enum):
-    LOGIN                    = 0
-    KEEP_ALIVE               = 1
-    WRITE_RECORD             = 2
-    DELETE_RECORD            = 3
-    SQL                      = 4
-    GET_SERVERS              = 5
-    ADD_USER                 = 6
-    DELETE_USER              = 7
-    LIST_USERS               = 8
-    DUMP_TABLE               = 9
+    LOGIN                          = 0
+    KEEP_ALIVE                     = 1
+    WRITE_RECORD                   = 2
+    DELETE_RECORD                  = 3
+    SQL                            = 4
+    GET_SERVERS                    = 5
+    ADD_USER                       = 6
+    DELETE_USER                    = 7
+    LIST_USERS                     = 8
+    DUMP_TABLE                     = 9
+    READ_RECORD                    = 10
+    GET_TABLE_ALLOCATION_STRUCTURE = 11
+    GET_N_ONLINE_CPUS              = 12
+    MANAGE_SQL_BLOCK_STATUS_FLAG   = 13
 
 Request_name = {
-    Request_type.LOGIN:                    'LOGIN',
-    Request_type.KEEP_ALIVE:               'KEEP_ALIVE',
-    Request_type.WRITE_RECORD:             'WRITE_RECORD',
-    Request_type.DELETE_RECORD:            'DELETE_RECORD',
-    Request_type.SQL:                      'SQL',
-    Request_type.GET_SERVERS:              'GET_SERVERS',
-    Request_type.ADD_USER:                 'ADD_USER',
-    Request_type.DELETE_USER:              'DELETE_USER',
-    Request_type.LIST_USERS:               'LIST_USERS',
-    Request_type.DUMP_TABLE:               'DUMP_TABLE' }
+    Request_type.LOGIN:                          'LOGIN',
+    Request_type.KEEP_ALIVE:                     'KEEP_ALIVE',
+    Request_type.WRITE_RECORD:                   'WRITE_RECORD',
+    Request_type.DELETE_RECORD:                  'DELETE_RECORD',
+    Request_type.SQL:                            'SQL',
+    Request_type.GET_SERVERS:                    'GET_SERVERS',
+    Request_type.ADD_USER:                       'ADD_USER',
+    Request_type.DELETE_USER:                    'DELETE_USER',
+    Request_type.LIST_USERS:                     'LIST_USERS',
+    Request_type.DUMP_TABLE:                     'DUMP_TABLE',
+    Request_type.READ_RECORD:                    'READ_RECORD',
+    Request_type.GET_TABLE_ALLOCATION_STRUCTURE: 'GET_TABLE_ALLOCATION_STRUCTURE',
+    Request_type.GET_N_ONLINE_CPUS:              'GET_N_ONLINE_CPUS',
+    Request_type.MANAGE_SQL_BLOCK_STATUS_FLAG:   'MANAGE_SQL_BLOCK_STATUS_FLAG' }
 
 Request_method = {
-    Request_type.LOGIN:                    HTTP_method.POST,
-    Request_type.KEEP_ALIVE:               HTTP_method.GET,
-    Request_type.WRITE_RECORD:             HTTP_method.PUT,
-    Request_type.DELETE_RECORD:            HTTP_method.DELETE,
-    Request_type.SQL:                      HTTP_method.POST,
-    Request_type.GET_SERVERS:              HTTP_method.POST,
-    Request_type.ADD_USER:                 HTTP_method.POST,
-    Request_type.DELETE_USER:              HTTP_method.POST,
-    Request_type.LIST_USERS:               HTTP_method.POST,
-    Request_type.DUMP_TABLE:               HTTP_method.POST}
+    Request_type.LOGIN:                          HTTP_method.POST,
+    Request_type.KEEP_ALIVE:                     HTTP_method.GET,
+    Request_type.WRITE_RECORD:                   HTTP_method.PUT,
+    Request_type.DELETE_RECORD:                  HTTP_method.DELETE,
+    Request_type.SQL:                            HTTP_method.POST,
+    Request_type.GET_SERVERS:                    HTTP_method.POST,
+    Request_type.ADD_USER:                       HTTP_method.POST,
+    Request_type.DELETE_USER:                    HTTP_method.POST,
+    Request_type.LIST_USERS:                     HTTP_method.POST,
+    Request_type.DUMP_TABLE:                     HTTP_method.POST,
+    Request_type.READ_RECORD:                    HTTP_method.GET,
+    Request_type.GET_TABLE_ALLOCATION_STRUCTURE: HTTP_method.POST,
+    Request_type.GET_N_ONLINE_CPUS:              HTTP_method.POST ,
+    Request_type.MANAGE_SQL_BLOCK_STATUS_FLAG:   HTTP_method.POST }
 
 Request_endpoint = {
-    Request_type.LOGIN:                    '/system',
-    Request_type.KEEP_ALIVE:               '/system',
-    Request_type.WRITE_RECORD:             '/tables',
-    Request_type.DELETE_RECORD:            '/tables',
-    Request_type.SQL:                      '/system',
-    Request_type.GET_SERVERS:              '/system',
-    Request_type.ADD_USER:                 '/system',
-    Request_type.DELETE_USER:              '/system',
-    Request_type.LIST_USERS:               '/system',
-    Request_type.DUMP_TABLE:               '/system'}
+    Request_type.LOGIN:                          '/system',
+    Request_type.KEEP_ALIVE:                     '/system',
+    Request_type.WRITE_RECORD:                   '/tables',
+    Request_type.DELETE_RECORD:                  '/tables',
+    Request_type.SQL:                            '/system',
+    Request_type.GET_SERVERS:                    '/system',
+    Request_type.ADD_USER:                       '/system',
+    Request_type.DELETE_USER:                    '/system',
+    Request_type.LIST_USERS:                     '/system',
+    Request_type.DUMP_TABLE:                     '/system',
+    Request_type.READ_RECORD:                    '/tables',
+    Request_type.GET_TABLE_ALLOCATION_STRUCTURE: '/system',
+    Request_type.GET_N_ONLINE_CPUS:              '/system',
+    Request_type.MANAGE_SQL_BLOCK_STATUS_FLAG:   '/system' }
 
 Request_action = {
-    Request_type.LOGIN:                    'ayradb_login',
-    Request_type.KEEP_ALIVE:               'keep_alive',
-    Request_type.WRITE_RECORD:             'table_insert_row',
-    Request_type.DELETE_RECORD:            'table_delete_row',
-    Request_type.SQL:                      'sqlq',
-    Request_type.GET_SERVERS:              'set_get_system_parameter',
-    Request_type.ADD_USER:                 'set_get_system_parameter',
-    Request_type.DELETE_USER:              'set_get_system_parameter',
-    Request_type.LIST_USERS:               'set_get_system_parameter',
-    Request_type.DUMP_TABLE:               'set_get_system_parameter'}
+    Request_type.LOGIN:                          'ayradb_login',
+    Request_type.KEEP_ALIVE:                     'keep_alive',
+    Request_type.WRITE_RECORD:                   'table_insert_row',
+    Request_type.DELETE_RECORD:                  'table_delete_row',
+    Request_type.SQL:                            'sqlq',
+    Request_type.GET_SERVERS:                    'set_get_system_parameter',
+    Request_type.ADD_USER:                       'set_get_system_parameter',
+    Request_type.DELETE_USER:                    'set_get_system_parameter',
+    Request_type.LIST_USERS:                     'set_get_system_parameter',
+    Request_type.DUMP_TABLE:                     'set_get_system_parameter',
+    Request_type.READ_RECORD:                    'table_read_row',
+    Request_type.GET_TABLE_ALLOCATION_STRUCTURE: 'set_get_system_parameter',
+    Request_type.GET_N_ONLINE_CPUS:              'set_get_system_parameter',
+    Request_type.MANAGE_SQL_BLOCK_STATUS_FLAG:   'set_get_system_parameter' }
 
 # to create a Request instance, do not use directly the constructor of the class, instead use
 # the helper functions:
@@ -74,6 +96,8 @@ Request_action = {
 #     create_request__delete_record()
 #     create_request__sqlq()
 #     create_request__get_servers()
+#     ...
+
 @dataclass
 class Request:
     request_type:    Request_type
@@ -135,8 +159,12 @@ class Request:
         return mes
 
     def submit(self, connection: HTTP_connection):
+        if verbose:
+            print(f'Request: submit: submitting request')
         message = self.to_HTTP_message()
         connection.submit_request_message(message)
+        if verbose:
+            print(f'Request: submit: request submitted')
 
     def print(self):
         print(f'Request: {Request_name[self.request_type]}')
@@ -290,6 +318,24 @@ def create_request_write_record_core(table_name: str, key: str, fields: dict, to
         token=token)
     return req
 
+# REQUEST READ_RECORD
+def create_request_read_record_core(table_name: str, key: str, fields: str, token: str = None) -> Request:
+    req = None
+
+    formatted_key = format_key(key)
+
+    parameters = {
+            "table_name": table_name,
+            "key_column_name": "key_column",
+            "key_value": formatted_key,
+            "fields": fields}
+
+    req = Request (\
+        Request_type.READ_RECORD, \
+        parameters=parameters, \
+        token=token)
+    return req
+
 # REQUEST SQL
 def create_request_sql(sql_query: str, warehouse_query: bool = True, token: str = None) -> Request:
     req = None
@@ -309,6 +355,19 @@ def create_request_get_servers(token: str = None) -> Request:
     body_json['target_parameter'] = 'servers_coordinates'
     body = bytearray(json.dumps(body_json).encode('ascii'))
     req = Request(Request_type.GET_SERVERS, body=body, token=token)
+    return req
+
+# REQUEST MANAGE_SQL_BLOCK_STATUS_FLAG
+def create_request_manage_sql_block_status_flag(operation: str, flag_value: str = None, token: str = None) -> Request:
+    req = None
+    body_json = {}
+    body_json['action'] = 'set'
+    body_json['target_parameter'] = 'sql_block_status'
+    body_json['manage_action'] = operation
+    if flag_value is not None:
+        body_json['value'] = flag_value
+    body = bytearray(json.dumps(body_json).encode('ascii'))
+    req = Request(Request_type.MANAGE_SQL_BLOCK_STATUS_FLAG, body=body, token=token)
     return req
 
 # REQUEST ADD_USER
@@ -392,4 +451,30 @@ def create_request_dump_table_to_warehouse(table_name: str, field_labels: str, t
         body_json['fields'] = field_labels_list
         body = bytearray(json.dumps(body_json).encode('ascii'))
         req = Request(Request_type.DUMP_TABLE, body=body, token=token)
+    return req
+
+# REQUEST GET_TABLE_ALLOCATION_STRUCTURE
+def create_request_get_table_allocation_structure(target_table_name: str = None, token: str = None) -> Request:
+    req = None
+    body_json = {}
+    body_json['action'] = 'get'
+    body_json['target_parameter'] = 'full_disk_allocation_structure'
+    if target_table_name is not None:
+        body_json['target_table_name'] = target_table_name
+
+    body = bytearray(json.dumps(body_json).encode('ascii'))
+    req = Request(Request_type.GET_TABLE_ALLOCATION_STRUCTURE, body=body, token=token)
+    return req
+
+# REQUEST GET_N_ONLINE_CPUS
+def create_request_get_n_online_cpus(token: str = None) -> Request:
+    req = None
+    keep_going = True
+
+    if keep_going == True:
+        body_json = {}
+        body_json['action'] = 'get'
+        body_json['target_parameter'] = 'n_online_cpus'
+        body = bytearray(json.dumps(body_json).encode('ascii'))
+        req = Request(Request_type.ADD_USER, body=body, token=token)
     return req

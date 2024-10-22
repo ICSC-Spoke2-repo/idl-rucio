@@ -3,8 +3,8 @@ authReplicaCount: 0
 traceReplicaCount: 0
 
 image:
-  repository: rucio/rucio-server #lucapacioselli/rucio-server
-  tag: release-34.5.0 #v1.0.0
+  repository: lucapacioselli/rucio-server #rucio/rucio-server
+  tag: v1.0.0 #release-34.5.0
 
 #configMap:
 #  name: policy-package
@@ -18,8 +18,9 @@ secretMounts:
   - secretName: plugin
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/did_meta_plugins/custom-did-meta-plugin.py
     subPath: custom-did-meta-plugin.py
-  #  mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/did_meta_plugins/ayradb_didmeta_plugin.py
-  #  subPath: ayradb_didmeta_plugin.py
+  - secretName: ayradb-cluster
+    mountPath: /tmp/AyraDB_cluster_credentials.cfg
+    subPath: AyraDB_cluster_credentials.cfg
   - secretName: permissions
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/permission/permissions.py
     subPath: permissions.py

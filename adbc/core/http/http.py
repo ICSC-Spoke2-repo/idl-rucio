@@ -1,16 +1,25 @@
-_all__ = ['HTTPMessage', 'HTTP_rx_buffer', 'HTTP_tx_buffer']
+__all__ = ['HTTPMessage', 'HTTP_rx_buffer', 'HTTP_tx_buffer']
 
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional, Dict
 from enum import Enum
+import logging
 import time
 import threading
 from threading import Lock
 
 from adbc.core.sockets.sockets import Socket_wrapper, DBConnectionError
 
+verbose = False
+verbose_parse_message = False
+verbose_thread = False
+verbose_thread_responses = False
+verbose_get_next_response = False
+
 SLEEP_TIME_50_US = 0.00005 # 50 microseconds
-TIMEOUT_RESPONSE = 10      # 10 seconds
+TIMEOUT_RESPONSE = 100     # 100 seconds
+PIPELINE_SIZE = 24         # for the pipelined HTTP_connection
 
 class HTTPMessageNotWellFormedError(Exception):
     def __init__(self, message):
@@ -240,7 +249,6 @@ class HTTP_rx_buffer:
         return int(chunk_length, 16)  # The length is in HEX notation, that is why we insert 16.
 
     def parse_message(self):
-        verbose_parse_message = False
         message = None
         message_type = HTTP_message_type.EMPTY
         method = None
@@ -498,6 +506,8 @@ class Thread_status(Enum):
 
 class HTTP_connection:
     def __init__(self, ip, port, scheme):
+        if verbose:
+            print(f'HTTP_connection: initing')
         self.ip = ip
         self.port = port
         self.scheme = scheme
@@ -505,8 +515,244 @@ class HTTP_connection:
         self.socket_tx_buf = HTTP_tx_buffer()
         self.socket_wrapper = None
 
-        self.status = Thread_status.AWAITING_REQUEST
-        self.status_mutex = Lock()
+        self.is_thread_running = False
+        self.is_thread_running_mutex = Lock()
+
+        self.cancel_thread = False
+        self.cancel_thread_mutex = Lock()
+
+        self.response_fifo = deque()
+        self.response_fifo_mutex = Lock()
+
+        self.thread = None
+
+
+        try:
+            self.socket_wrapper = Socket_wrapper(self.ip, self.port, self.scheme)
+        except Exception as e:
+            raise DBConnectionError(f'ERROR: HTTP_connection: connection error: 0020')
+
+        if verbose:
+            print(f'socket_wrapper: {self.socket_wrapper} {self.socket_wrapper.socket}')
+
+        # launch permanent thread
+        if verbose:
+            print("HTTP_connection: launching daemon thread: thread_func_connection__blocking")
+        self.thread = threading.Thread(target=self.thread_func_connection__blocking)
+        self.thread.daemon = True
+        self.thread.start()
+        if verbose:
+            print("HTTP_connection: daemon thread launched: thread_func_connection__blocking")
+
+        # wait for complete start of the thread before continuing
+        thread_started = False
+        while thread_started == False:
+            with self.is_thread_running_mutex:
+                if self.is_thread_running == True:
+                    thread_started = True
+
+        # instantiation over
+        if verbose:
+            print("HTTP_connection: instantiation over")
+
+    def shut_down(self):
+        if verbose:
+            print(f'HTTP_connection: shut_down')
+        # communicate to the thread that it must return
+        with self.cancel_thread_mutex:
+            self.cancel_thread= True
+
+        # wait that the thread has actually stopped
+        wait_thread = True
+        while wait_thread == True:
+            with self.is_thread_running_mutex:
+                if self.is_thread_running == False:
+                    wait_thread = False
+            time.sleep(SLEEP_TIME_50_US)
+
+        # disconnect the socket
+        if verbose:
+            print(f'HTTP_connection: shut_down: disconnetting')
+        self.socket_wrapper.disconnect()
+
+        # join the thread
+        if verbose:
+            print(f'HTTP_connection: shut_down: joining thread')
+        self.thread.join()
+        if verbose:
+            print(f'HTTP_connection: shut_down: thread joined')
+
+    def submit_request_message(self, message: HTTPMessage):
+        if verbose:
+            print("HTTP_connection: submit_request_message")
+        byte_array = message.to_byte_array()
+        if verbose:
+            print(f"HTTP_connection: submitting the byte array: {byte_array}")
+        with self.socket_tx_buf.byte_array_mutex:
+            self.socket_tx_buf.byte_array += byte_array
+
+    def get_next_response_message(self):
+        message = None
+        response_fetched = False
+        with self.response_fifo_mutex:
+            if len(self.response_fifo) > 0:
+                message = self.response_fifo.popleft() # Pop message from the head
+                response_fetched = True
+        return message
+
+    def get_next_response_message_wrapper(self, timeout=None):
+        message = None
+        error = None
+        try:
+            if timeout is not None:
+                time_start_wait = time.time()
+            keep_waiting = True
+            while keep_waiting == True:
+                if verbose:
+                    print('get_next_response_message_wrapper: checking for response')
+                message = self.get_next_response_message()
+                if message is not None:
+                    if verbose or verbose_get_next_response:
+                        print('get_next_response_message_wrapper: received a response message')
+                        message.print()
+                    keep_waiting = False
+                else:
+                    if verbose:
+                        print('get_next_response_message_wrapper: locking is_thread_running_mutex')
+                    with self.is_thread_running_mutex:
+                        if self.is_thread_running == False:
+                            error = 'get_next_response_message_wrapper: connection error'
+                            keep_waiting = False
+                    if verbose:
+                        print(f'get_next_response_message_wrapper: keep_waiting: {keep_waiting}')
+                    if timeout is not None:
+                        time_now = time.time()
+                        delta_time = time_now - time_start_wait
+                        if verbose:
+                            print(f'get_next_response_message_wrapper: delta_time: {delta_time}')
+                        if delta_time > timeout:
+                            error = 'get_next_response_message_wrapper: wait response timeout'
+                            keep_waiting = False
+                    if verbose:
+                        print(f'get_next_response_message_wrapper: keep_waiting: {keep_waiting}')
+                    if keep_waiting == True:
+                        time.sleep(SLEEP_TIME_50_US)
+            if verbose:
+                print(f'get_next_response_message_wrapper: returning with error {error}')
+        except Exception as e:
+            if verbose:
+                print(f'get_next_response_message_wrapper: Exception {e}')
+                res = False
+                error = f'ERROR: get_next_response_message_wrapper: Exception {e}'
+
+        return message, error
+
+    def thread_func_connection__blocking(self):
+        logging.basicConfig(level=logging.INFO)
+        try:
+            if verbose_thread:
+                logging.info('thread_func_connection_blocking: start')
+            with self.is_thread_running_mutex:
+                self.is_thread_running = True
+
+            connection_error = False
+            connection_error_string = None
+            while True:
+                if verbose_thread:
+                    logging.info(f'thread_func_connection_blocking: checking thread cancellation: starting loop')
+                # dump the connection's tx_buffer onto the socket's buffer
+                try:
+                    self.socket_tx_buf.dump_to_socket(self.socket_wrapper)
+                except DBConnectionError as e:
+                    connection_error = True
+                    connection_error_string = str(e)
+                    logging.info(f'thread_func_connection__blocking: Exception: {e}')
+
+                # read bytes from the socket's buffer into the rx_buffer's byte array
+                try:
+                    if verbose_thread:
+                        logging.info('thread_func_connection_blocking: reading rx buffer')
+                    read_chunk = self.socket_wrapper.read()
+                    if len(read_chunk) > 0:
+                        if verbose_thread:
+                            logging.info(f'LOGGING: thread_func_connection__blocking: read from socket: {read_chunk}')
+                        with self.socket_rx_buf.byte_array_mutex:
+                            self.socket_rx_buf.byte_array += read_chunk
+                except DBConnectionError as e:
+                    connection_error = True
+                    connection_error_string = str(e)
+                    logging.info(f'thread_func_connection__blocking: Exception: {e}')
+                    
+                # get a response message from the rx_buffer
+                try:
+                    if verbose_thread:
+                        logging.info('thread_func_connection_blocking: trying to parse message from rx buffer')
+                    message = self.socket_rx_buf.parse_message()
+                    if message is not None:
+                        if verbose_thread or verbose_thread_responses:
+                            logging.info(f'LOGGING: thread_func_connection__blocking: parsed message:')
+                            message.print()
+                        if message.message_type == HTTP_message_type.RESPONSE:
+                            time_last_bytes_received = time.time()
+                            if message.status_code <= 199:
+                                # this response is provisional
+                                if verbose_thread:
+                                    logging.info(f'LOGGING: thread_func_connection__blocking: the message is provisional: skipping')
+                                    message.print()
+                                pass
+                            else:
+                                # this is a non-provisional response message
+                                with self.response_fifo_mutex:
+                                    self.response_fifo.append(message)
+                    else:
+                        if verbose_thread:
+                            logging.info('thread_func_connection_blocking: no response message found')
+
+                except Exception as e:
+                    # any exception in parsing the rx buffer is interpreted as a connection error
+                    connection_error = True
+                    connection_error_string = str(e)
+                    logging.info(f'thread_func_connection__blocking: Exception: {e}')
+                
+                # a small sleep time of 50 us at each loop
+                if verbose_thread:
+                    logging.info('thread_func_connection_blocking: short sleep')
+                time.sleep(SLEEP_TIME_50_US)
+
+                # thread cancellation
+                if verbose_thread:
+                    logging.info(f'thread_func_connection_blocking: checking thread cancellation: connection_error: {connection_error}')
+                thread_returns = False
+                if connection_error == True:
+                    thread_returns = True
+                else:
+                    with self.cancel_thread_mutex:
+                        if self.cancel_thread == True:
+                            thread_returns = True
+                if verbose_thread:
+                    logging.info(f'thread_func_connection_blocking: checking thread cancellation: thread_returns: {thread_returns}')
+
+                # the thread returns here, if it is cancelled from
+                # outside or if there is a connection error
+                if thread_returns == True:
+                    with self.is_thread_running_mutex:
+                        self.is_thread_running = False
+                    break
+        except Exception as e:
+            logging.info(f'thread_func_connection__blocking: Exception: {e}')
+
+class HTTP_pipelined_connection:
+    def __init__(self, ip, port, scheme):
+        self.ip = ip
+        self.port = port
+        self.scheme = scheme
+        self.socket_rx_buf = HTTP_rx_buffer()
+        self.socket_tx_buf = HTTP_tx_buffer()
+        self.socket_wrapper = None
+        self.pipeline = deque(maxlen=PIPELINE_SIZE)
+        self.pipeline_mutex = Lock()
+        self.response_fifo = deque()
+        self.response_fifo_mutex = Lock()
 
         self.is_thread_running = False
         self.is_thread_running_mutex = Lock()
@@ -514,23 +760,19 @@ class HTTP_connection:
         self.cancel_thread = False
         self.cancel_thread_mutex = Lock()
 
-        self.current_response_message = None
-        self.current_response_message_mutex = Lock()
-
         self.thread = None
-
-        self.verbose = False
+        verbose = False
 
         try:
             self.socket_wrapper = Socket_wrapper(self.ip, self.port, self.scheme)
         except Exception as e:
             raise DBConnectionError(f'ERROR: HTTP_connection: connection error: 0020')
 
-        if self.verbose:
+        if verbose:
             print(f'socket_wrapper: {self.socket_wrapper} {self.socket_wrapper.socket}')
 
         # launch permanent thread
-        self.thread = threading.Thread(target=self.thread_func_connection__blocking)
+        self.thread = threading.Thread(target=self.thread_func_connection__nonblocking)
         self.thread.daemon = True
         self.thread.start()
 
@@ -542,7 +784,7 @@ class HTTP_connection:
                     thread_started = True
 
         # instantiation over
-        if self.verbose:
+        if verbose:
             print("HTTP_connection: instantiation over")
 
     def shut_down(self):
@@ -560,74 +802,47 @@ class HTTP_connection:
                     thread_running = False
 
 
-        if self.verbose:
+        if verbose:
             print(f'HTTP_connection: shut_down: disconnetting')
         self.socket_wrapper.disconnect()
 
-        if self.verbose:
+        if verbose:
             print(f'HTTP_connection: shut_down: joining thread')
         self.thread.join()
-        if self.verbose:
+        if verbose:
             print(f'HTTP_connection: shut_down: thread joined')
 
     def submit_request_message(self, message: HTTPMessage):
-        if self.verbose:
-            print("HTTP_connection: submit_request_message")
-            print(f'LOGGING: submit_request_message: acquiring the lock on status_mutex')
-        with self.status_mutex:
-            if self.status == Thread_status.AWAITING_REQUEST:
-                self.status = Thread_status.AWAITING_RESPONSE
-                byte_array = message.to_byte_array()
-                if self.verbose:
-                    print(f"HTTP_connection: submitting the byte array: {byte_array}")
-                with self.socket_tx_buf.byte_array_mutex:
-                    self.socket_tx_buf.byte_array += byte_array
+        res = True
+        with self.pipeline_mutex:
+            if len(self.pipeline) < PIPELINE_SIZE:
+                self.pipeline.append(message)  # Insert message at the tailof the pipeline
+            else:
+                res = False
 
-                # lock the current_response_message_mutex
-                if self.verbose:
-                    print(f'LOGGING: submit_request_message: acquiring the lock on current_response_message_mutex')
-                with self.current_response_message_mutex:
-                    self.current_response_message = None
-                if self.verbose:
-                    print(f'LOGGING: submit_request_message: releasing the lock on current_response_message_mutex')
+        if res == True:
+            byte_array = message.to_byte_array()
+            with self.socket_tx_buf.byte_array_mutex:
+                self.socket_tx_buf.byte_array += byte_array
 
-            elif self.status == Thread_status.AWAITING_RESPONSE:
-                raise HTTPConnectionBusyError(f'ERROR: HTTP_connection: submit_request_message: connection busy: status: AWAITING_RESPONSE')
-        if self.verbose:
-            print(f'LOGGING: submit_request_message: releasing the lock on status_mutex')
+        return res
 
     def get_next_response_message(self):
         message = None
-        time_last_check_thread_running = time.time()
-        while True:
-            #if self.verbose:
-            #    print(f'LOGGING: get_next_response_message: acquiring the lock on current_response_message_mutex')
-            with self.current_response_message_mutex:
-                if self.current_response_message is not None:
-                    if self.verbose:
-                        print(f'LOGGING: get_next_response_message: found a response message')
-                    message = self.current_response_message
-                    self.current_response_message = None
-            #if self.verbose:
-            #    print(f'LOGGING: get_next_response_message: releasing the lock on current_response_message_mutex')
-            if message is not None:
-                break
-            time.sleep(SLEEP_TIME_50_US)
-
-            time_now = time.time()
-            difftime = time_now - time_last_check_thread_running
-            if difftime > 2:
-                running = True
-                with self.is_thread_running_mutex:
-                    running = self.is_thread_running
-                if running == True:
-                    time_last_check_thread_is_running = time_now
-                else:
-                    raise HTTPConnectionResponseTimeoutError(f'ERROR: timeour expired while awaiting response')
-
+        response_fetched = False
+        with self.response_fifo_mutex:
+            if len(self.response_fifo) > 0:
+                message = self.response_fifo.popleft() # Pop message from the head
+                response_fetched = True
+        if response_fetched == True:
+            # also fetch a message from the pipeline
+            with self.pipeline_mutex:
+                if len(self.pipeline) > 0:
+                    m = self.pipeline.popleft() # Pop message from the head
         return message
 
-    def thread_func_connection__blocking(self):
+    def thread_func_connection__nonblocking(self):
+        verbose = False
         with self.is_thread_running_mutex:
             self.is_thread_running = True
 
@@ -636,25 +851,24 @@ class HTTP_connection:
         connection_error_string = None
         shut_down_thread_due_to_error = False
         while True:
-
             # dump the connection's tx_buffer onto the socket's buffer
-            #print(f'LOGGING: thread_func_connection__blocking: PHASE 1: dump_to_socket')
+            #print(f'LOGGING: thread_func_connection__nonblocking: PHASE 1: dump_to_socket')
             try:
                 self.socket_tx_buf.dump_to_socket(self.socket_wrapper)
             except DBConnectionError as e:
                 connection_error = True
                 connection_error_string = str(e)
-                #print(f'thread_func_connection_blocking: Exception: {e}')
+                print(f'thread_func_connection_blocking: Exception: {e}')
 
             # read bytes from the socket's buffer into the rx_buffer's byte array
-            #print(f'LOGGING: thread_func_connection__blocking: PHASE 2: read from socket')
+            #print(f'LOGGING: thread_func_connection__nonblocking: PHASE 2: read from socket')
             try:
-                #print(f'LOGGING: thread_func_connection__blocking: PHASE 2: self.socket_wrapper.read(): start')
+                #print(f'LOGGING: thread_func_connection__nonblocking: PHASE 2: self.socket_wrapper.read(): start')
                 read_chunk = self.socket_wrapper.read()
-                #print(f'LOGGING: thread_func_connection__blocking: PHASE 2: self.socket_wrapper.read(): end')
+                #print(f'LOGGING: thread_func_connection__nonblocking: PHASE 2: self.socket_wrapper.read(): end')
                 if len(read_chunk) > 0:
-                    if self.verbose:
-                        print(f'LOGGING: thread_func_connection__blocking: read from socket: {read_chunk}')
+                    if verbose:
+                        print(f'LOGGING: thread_func_connection__nonblocking: read from socket: {read_chunk}')
                     with self.socket_rx_buf.byte_array_mutex:
                         self.socket_rx_buf.byte_array += read_chunk
             except DBConnectionError as e:
@@ -663,73 +877,38 @@ class HTTP_connection:
                 print(f'thread_func_connection_blocking: Exception: {e}')
                 
             # get a response message from the rx_buffer
-            #print(f'LOGGING: thread_func_connection__blocking: PHASE 3: parse rx buffer')
+            #print(f'LOGGING: thread_func_connection__nonblocking: PHASE 3: parse rx buffer')
             try:
                 message = self.socket_rx_buf.parse_message()
                 if message is not None:
-                    if self.verbose:
-                        print(f'LOGGING: thread_func_connection__blocking: parsed message:')
+                    if verbose:
+                        print(f'LOGGING: thread_func_connection__nonblocking: parsed message:')
                         message.print()
                     if message.message_type == HTTP_message_type.RESPONSE:
                         time_last_bytes_received = time.time()
                         if message.status_code <= 199:
                             # this response is provisional
-                            if self.verbose:
-                                print(f'LOGGING: thread_func_connection__blocking: the message is provisional: skipping')
+                            if verbose:
+                                print(f'LOGGING: thread_func_connection__nonblocking: the message is provisional: skipping')
                                 message.print()
                             pass
                         else:
                             # this is a non-provisional response message
-                            if self.verbose:
-                                print(f'LOGGING: thread_func_connection__blocking: the message is not provisional')
+                            if verbose:
+                                print(f'LOGGING: thread_func_connection__nonblocking: the message is not provisional')
 
-                            # unlock the current_response_message mutex
-                            if self.verbose:
-                                print(f'LOGGING: thread_func_connection__blocking: acquiring the lock on current_response_message_mutex')
-                            with self.current_response_message_mutex:
-                                if self.verbose:
-                                    print(f'LOGGING: setting self.current_response_message')
-                                self.current_response_message = message
-                            if self.verbose:
-                                print(f'LOGGING: thread_func_connection__blocking: releasing the lock on current_response_message_mutex')
+                            with self.response_fifo_mutex:
+                                self.response_fifo.append(message)
+                else:
+                    #print(f'LOGGING: thread_func_connection__nonblocking: the message is None')
+                    pass
 
-                            # switch the status to AWAITING_REQUEST
-                            if self.verbose:
-                                print(f'LOGGING: thread_func_connection__blocking: acquiring the lock on status_mutex')
-                            with self.status_mutex:
-                                self.status = Thread_status.AWAITING_REQUEST
-                            if self.verbose:
-                                print(f'LOGGING: thread_func_connection__blocking: releasing the lock on status_mutex')
-
-                    elif message.message_type == HTTP_message_type.REQUEST:
-                        time_last_bytes_received = time.time()
-                        pass
-                    elif message.message_type == HTTP_message_type.EMPTY:
-                        pass
             except Exception as e:
                 # any exception in parsing the rx buffer is interpreted as a connection error
                 connection_error = True
                 connection_error_string = str(e)
-                #print(f'thread_func_connection_blocking: Exception: {e}')
+                print(f'thread_func_connection_blocking: Exception: {e}')
             
-            # check out the response timeout. For long queries AyraDB transmits a flow
-            # of provisional responses about every 3 seconds. When a provisional or
-            # not provisional response message is received, the time_last_bytes_received
-            # is updated. If we periodically check time_last_bytes_received, we can 
-            # understand if the flow of responses is interrupted, so we can raise
-            # the timeout exception
-            response_timeout = False
-            with self.status_mutex:
-                if self.status == Thread_status.AWAITING_RESPONSE:
-                    tnow = time.time()
-                    deltat = tnow - time_last_bytes_received
-                    if deltat > TIMEOUT_RESPONSE:
-                        response_timeout = True
-            if response_timeout == True: 
-                #raise HTTPConnectionResponseTimeoutError(f'ERROR: thread_func_connection__blocking: Response timeout fired')
-                shut_down_thread_due_to_error = True
-
-
             # a small sleep time of 50 us at each loop
             time.sleep(SLEEP_TIME_50_US)
 
@@ -749,10 +928,9 @@ class HTTP_connection:
                 # get out of the main loop
                 break
 
-
             # raise exception in case of connection error
             if connection_error == True and shut_down_thread_now == False:
-                raise DBConnectionError(f'ERROR: thread_func_connection__blocking: connection error: {connection_error_string}')
+                raise DBConnectionError(f'ERROR: thread_func_connection__nonblocking: connection error: {connection_error_string}')
                     
 
 

@@ -16,17 +16,33 @@
 # For the following didmeta plugin to work correctly, it must be used with the IDL API Client (IDL_cli.py) #
 ############################################################################################################
 
-# Includes for AyraDB connection
+# Includes for AyraDB connection 1.0.0
+# import random
+# import string
+# import sys
+# import time 
+
+# from adbc.core.adbc import adbc_1liner__write_record__wrapper
+# from adbc.core.adbc import adbc_1liner__delete_record__wrapper
+# from adbc.core.adbc import adbc_1liner__sql__wrapper
+# from adbc.core.adbc import adbc_1liner__dump_table_to_warehouse__wrapper
+# from adbc.core.adbc import adbc_1liner__dump_table_ild_metadata_to_warehouse
+# from adbc.core.adbc import adbc__generate_record_key_from_field
+
+# Includes for AyraDB connection 1.0.1
+import copy
 import random
 import string
 import sys
-import time 
+import time
 
 from adbc.core.adbc import adbc_1liner__write_record__wrapper
 from adbc.core.adbc import adbc_1liner__delete_record__wrapper
+from adbc.core.adbc import adbc_1liner__read_record__wrapper
 from adbc.core.adbc import adbc_1liner__sql__wrapper
-from adbc.core.adbc import adbc_1liner__dump_table_to_warehouse__wrapper
-from adbc.core.adbc import adbc_1liner__dump_table_ild_metadata_to_warehouse
+from adbc.core.adbc import adbc_1liner__dump_table_to_warehouse__wrapper, adbc_1liner__dump_table_ild_metadata_to_warehouse
+from adbc.core.adbc_pipelined import multi_pipelined_read__wrapper
+from adbc.core.adbc_pipelined import multi_pipelined_write__wrapper
 from adbc.core.adbc import adbc__generate_record_key_from_field
 
 # For conversion of metadata CREATION_DATE and EPOCH
@@ -53,6 +69,9 @@ from sqlalchemy.sql.expression import true
 from rucio.client.didclient import DIDClient
 import requests
 
+# Include to get the coordinates and credentials of the AyraDB cluster
+import configparser
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Any, Optional, Union
@@ -70,12 +89,15 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         super(CustomDidMetaPlugin, self).__init__()
         self.plugin_name = "IDL"
 
+        config = configparser.ConfigParser()
+        config.read('/tmp/AyraDB_cluster_credentials.cfg')
+
         # AyraDB cluster INFN coordinates
-        self.ayradb_servers = [ {'ip': '65.109.166.225', 'port': 10021, 'name': 'bssm4u5y' }, 
-                               {'ip': '95.216.170.67', 'port': 10021, 'name': 'g5joxu2z'} ] 
+        self.ayradb_servers = config.get('coordinates', 'servers')
 
         # INFN cluster credentials (TO BE HIDDEN IN SOME WAY)
-        self.credentials = {'username': 'infn1', 'password': 'Gelat0AlTamar1nd0'}
+        self.credentials = config.get('credentials', 'cred')
+
 
         self.table_name = 'metadata'
 
