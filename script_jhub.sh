@@ -41,7 +41,7 @@ fi
 #Ensure .bash_profile sources .bashrc
 echo -e "if [ -f ~/.bashrc ]; then\n\tsource ~/.bashrc\nfi" > ~/.bash_profile
 
-#Add path to /usr/bin/ to locate leonardo_upload.py and cred.py from anywhere if not already present
+#Add path to /usr/bin/ to locate idl_cli and cred.py from anywhere if not already present
 grep -qxF "export PATH=$PATH:/usr/bin" ~/.bashrc || echo -e "export PATH=$PATH:/usr/bin\n\n" >> ~/.bashrc
 
 #Check if the warning is already present
@@ -54,7 +54,7 @@ if ! grep -q 'WARNING: The server may have restarted.' ~/.bashrc; then
     echo 'echo "* new terminal, please edit the                                    *"' >> ~/.bashrc
     echo 'echo "* /opt/conda/etc/rucio.cfg                                         *"' >> ~/.bashrc
     echo 'echo "* with the cred.py script, e.g.:                                   *"' >> ~/.bashrc
-    echo 'echo "* cred.py --user <USERNAME> --a <ACCOUNT>                          *"' >> ~/.bashrc
+    echo 'echo "* cred.py --user <USERNAME> --account <ACCOUNT>                    *"' >> ~/.bashrc
     echo 'echo "* Enter the password (hidden): <PASSWORD>                          *"' >> ~/.bashrc
     echo 'echo "* Updated 'rucio.cfg' -> username, password, account correctly       *"' >> ~/.bashrc
     echo -e 'echo "********************************************************************"\n\n' >> ~/.bashrc
@@ -77,4 +77,6 @@ source ~/.bashrc
 #source ~/.bashrc
 
 grep -qxF 'eval "$(register-python-argcomplete rucio)"' ~/.bashrc || echo -e 'eval "$(register-python-argcomplete rucio)"' >> ~/.bashrc
+grep -qxF 'eval "$(register-python-argcomplete idl_cli)"' ~/.bashrc || echo -e 'eval "$(register-python-argcomplete idl_cli)"' >> ~/.bashrc
+grep -qxF 'eval "$(register-python-argcomplete cred.py)"' ~/.bashrc || echo -e 'eval "$(register-python-argcomplete cred.py)"' >> ~/.bashrc
 grep -qxF "rucio whoami" ~/.bashrc || echo -e 'rucio whoami' >> ~/.bashrc

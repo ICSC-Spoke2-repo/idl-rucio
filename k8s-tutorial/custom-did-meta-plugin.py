@@ -38,11 +38,11 @@ import time
 
 from adbc.core.adbc import adbc_1liner__write_record__wrapper
 from adbc.core.adbc import adbc_1liner__delete_record__wrapper
-from adbc.core.adbc import adbc_1liner__read_record__wrapper
+#from adbc.core.adbc import adbc_1liner__read_record__wrapper
 from adbc.core.adbc import adbc_1liner__sql__wrapper
 from adbc.core.adbc import adbc_1liner__dump_table_to_warehouse__wrapper, adbc_1liner__dump_table_ild_metadata_to_warehouse
-from adbc.core.adbc_pipelined import multi_pipelined_read__wrapper
-from adbc.core.adbc_pipelined import multi_pipelined_write__wrapper
+#from adbc.core.adbc_pipelined import multi_pipelined_read__wrapper
+#from adbc.core.adbc_pipelined import multi_pipelined_write__wrapper
 from adbc.core.adbc import adbc__generate_record_key_from_field
 
 # For conversion of metadata CREATION_DATE and EPOCH
@@ -155,7 +155,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 # Try to convert the string to a datetime object
                 try:
                     # Adjust the format string as needed for your datetime format
-                   return datetime.strptime(decoded_string, '%Y-%m-%dT%H:%M:%S.%f')
+                   return datetime.strptime(decoded_string, '%Y-%m-%d %H:%M:%S.%f')
                 except ValueError:
                     return decoded_string  # Return as string if it can't be parsed as datetime
             
@@ -253,6 +253,9 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         # For now, I am passing the hash_data and did_name in the argument "name" in the Client as "{hash_data}:{did_name}". Here in the plugin I split the two infos
         hash_data = name.split(':')[0]
         clean_name = name.split(':')[1]
+
+        #print(self.ayradb_servers)
+        #print(self.credentials)
         
         # Constant SQL query to retrieve the metadata of a DID
         const_sql_query = f"SELECT * FROM ayradb.metadata WHERE LINK='{scope.internal}:{clean_name}';"
@@ -279,9 +282,9 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
         print(metahash_dict)
 
-        #string = metahash_dict["EPOCH"]
-        #metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
-        #metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
+        string = metahash_dict["EPOCH"]
+        metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
+        metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
 
         metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
 
@@ -348,6 +351,12 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         # print(select)
 
         filters = [elem for elem in filters if 'sql_select' not in elem]
+        #for fil in filters:
+        #    for key in fil:
+        #        if key.startswith("EPOCH"):
+        #            
+        #        elif key.startswith("CREATION_DATE"): 
+
         # print(filters)
 
         # Build SQL query

@@ -29,7 +29,7 @@ singleuser:
     # Inspect the Dockerfile at:
     # https://github.com/jupyter/docker-stacks/tree/HEAD/datascience-notebook/Dockerfile
     name: lucapacioselli/jupyter4rucio #jupyter/tensorflow-notebook 
-    tag: v1.0.4 #ubuntu-22.04 
+    tag: v1.0.5 #ubuntu-22.04 
   # `cmd: null` allows the custom CMD of the Jupyter docker-stacks to be used
   # which performs further customization on startup.
   cmd: null
@@ -96,6 +96,6 @@ hub:
       admin_users:
         - test
     DummyAuthenticator:
-      password: password123
+      password: p0m0d0r0
     JupyterHub:
       authenticator_class: dummy
