@@ -99,8 +99,16 @@ class IDL():
         
         # Read account from the rucio.cfg in /opt/conda/etc/rucio.cfg. Edit it if your rucio config file is somewhere else
         config = configparser.ConfigParser()
-        config.read('/opt/conda/etc/rucio.cfg')
-        account = config.get('client', 'account')
+
+        try:
+            if os.path.exists("/opt/conda/etc/rucio.cfg"):
+                config.read('/opt/conda/etc/rucio.cfg')
+                account = config.get('client', 'account')
+            elif os.path.exists("/opt/rucio/etc/rucio.cfg"):
+                config.read('/opt/rucio/etc/rucio.cfg')
+                account = config.get('client', 'account')
+        except FileNotFoundError as e:
+            print(f"ERROR: {e}")
         
         # Configuration
         self.account = account
@@ -114,7 +122,7 @@ class IDL():
     def add_container(self, scope, name, statuses, meta):
         pass
 
-    def customUpload(self, scope, file, meta, rse, bulk = False):
+    def customUpload(self, scope, file, meta, rse, bulk):
         '''
         Custom upload: upload file + set-metadata from .json file
 
@@ -211,8 +219,8 @@ class IDL():
             hash_data = compute_sha256(tmp_file[0]['temp_file_path'][:-5])
             name = hash_data + ':' + name
             # After it is being used it is removed from /tmp/. You MUST have your donwloaded files in another directory!
-            #if os.path.exists(tmp_file[0]['temp_file_path'][:-5]):
-            #    os.remove(tmp_file[0]['temp_file_path'][:-5])
+            if os.path.exists(tmp_file[0]['temp_file_path'][:-5]):
+                os.remove(tmp_file[0]['temp_file_path'][:-5])
             try:
                 # Get the metadata for the specific DID
                 dict = self.didc.get_metadata(plugin = "IDL", scope=scope, name=name)
@@ -303,7 +311,7 @@ def main():
     pars_upload.add_argument("--rse", type=str, required=True, help="RSE expression")
     pars_upload.add_argument("--file", type=str, required=True, help="File path of the data file")
     pars_upload.add_argument("--meta", type=str, required=True, help="File path of the metadata file")
-    pars_upload.add_argument("--bulk", type=bool, help="Upload a list of files. Default: False [TO BE IMPLEMENTED]")
+    pars_upload.add_argument("--bulk", type=bool, default=False, help="Upload a list of files. Default: False [TO BE IMPLEMENTED]")
 
     # Subparser download
     pars_download = subpars.add_parser("download", help="Download a DID")
