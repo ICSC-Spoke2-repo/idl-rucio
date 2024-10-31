@@ -153,11 +153,11 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 decoded_string = data.decode('utf-8')  # Change 'utf-8' if needed
         
                 # Try to convert the string to a datetime object
-                try:
-                    # Adjust the format string as needed for your datetime format
-                   return datetime.strptime(decoded_string, '%Y-%m-%d %H:%M:%S.%f')
-                except ValueError:
-                    return decoded_string  # Return as string if it can't be parsed as datetime
+                #try:
+                #    # Adjust the format string as needed for your datetime format
+                #    return datetime.strptime(decoded_string, '%Y-%m-%d %H:%M:%S.%f')
+                #except ValueError:
+                return decoded_string  # Return as string if it can't be parsed as datetime
             
             except UnicodeDecodeError:
                 return str(data)  # Return as a string representation if decoding fails
@@ -282,8 +282,9 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
         print(metahash_dict)
 
-        string = metahash_dict["EPOCH"]
-        metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
+        # string = metahash_dict["EPOCH"]
+        # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
+        metahash_dict["EPOCH"] = metahash_dict["EPOCH"].replace(' ', 'T')
         metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
 
         metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
@@ -398,24 +399,18 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, query, warehouse_query=True)          
 
         # Debug
-        # print(records)
-        # print(records[0])
-        # print(records[len(records)-1])
+        #print(records)
+        #print(records[0])
+        #print(records[len(records)-1])
 
         # Convert the Python dicts from bytearrays to strings and append to a list
         results = []
         for dicts in records:
             converted_dict = self.convert_bytearrays(dicts)
-            # print(converted_dict['LINK'])
-            # print('##########################')
-            # print(converted_dict['LINK'].split(':'))
-            # print('##########################')
-            # print(converted_dict['LINK'].split(':')[0])
-            # print('##########################')
-            # print(f"{scope}")
             if converted_dict['LINK'].split(':')[0] == f"{scope}":
                 results.append(converted_dict)
 
+        # Debug
         #print(results)
 
         # Check result of getting the metadata for a DID
@@ -423,41 +418,6 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             print(f'ERROR: listing the DIDs: {error}')
         elif res == True:
             return results
-
-        #try:
-            # instantiate fe and create SQL query
-        #    fe = FilterEngine(filters, model_class=None, strict_coerce=False)
-            # This query DOESN'T work...
-        #    query_str = fe.create_sqla_query(
-        #        additional_filters=[('scope', operator.eq, scope.internal), ('vo', operator.eq, scope.vo)]
-        #    )
-        #except Exception as e:
-        #    raise exception.DataIdentifierNotFound(e)
-        
-        # Probably we should return the list of dids that satisfy the filters...
-        #sql_query = "SELECT * FROM ayradb.metadata WHERE {} ".format(query_str)
-        
-        #res, error, records = adbc_1liner__sql__wrapper(
-        #    self.ayradb_servers, self.credentials, 
-        #    sql_query, warehouse_query=True
-        #)           
-
-        # Convert the records
-        #res_list = []
-        #i = 0
-        #for elem in records:
-        #    converted_dict = self.convert_bytearrays(elem)
-        #    res_list[i] = converted_dict
-        #    i = i + 1
-
-        # Check result of getting the list of dids
-        #if res == False:
-        #    print(f'ERROR: error getting list of dids: {error}')
-        #elif res == True:
-        #    return res_list
-
-        # For now we return a NotImplementedError
-        #return f'ERROR: error getting list of dids: NotImplementedError'
 
     def manages_key(self, key, *, session: "Optional[Session]" = None):
         return True

@@ -2,10 +2,10 @@
 
 ################# WARNING ##################
 # FOR NOW I'M DISABLING THE HTTPS CONNCECTION WARNING, BUT THIS CAN HIDE SOME REAL HTTPS ISSUES!!!
-#import urllib3
-#import warnings
+import urllib3
+import warnings
 # Suppress only the InsecureRequestWarning from urllib3
-#warnings.filterwarnings('ignore', message='Unverified HTTPS request', category=urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings('ignore', message='Unverified HTTPS request', category=urllib3.exceptions.InsecureRequestWarning)
 ############################################
 
 # Includes from the rucio exe
@@ -34,25 +34,26 @@ from rucio import version
 from rucio.client import Client
 from rucio.common.config import config_get, config_get_float
 from rucio.common.constants import ReplicaState
-from rucio.common.exception import (
-    AccessDenied,
-    CannotAuthenticate,
-    DataIdentifierAlreadyExists,
-    DataIdentifierNotFound,
-    DIDFilterSyntaxError,
-    DuplicateContent,
-    DuplicateCriteriaInDIDFilter,
-    DuplicateRule,
-    InputValidationError,
-    InvalidObject,
-    InvalidRSEExpression,
-    InvalidType,
-    MissingDependency,
-    RSENotFound,
-    RucioException,
-    RuleNotFound,
-    UnsupportedOperation,
-)
+from rucio.common import exception
+# from rucio.common.exception import (
+#     AccessDenied,
+#     CannotAuthenticate,
+#     DataIdentifierAlreadyExists,
+#     DataIdentifierNotFound,
+#     DIDFilterSyntaxError,
+#     DuplicateContent,
+#     DuplicateCriteriaInDIDFilter,
+#     DuplicateRule,
+#     InputValidationError,
+#     InvalidObject,
+#     InvalidRSEExpression,
+#     InvalidType,
+#     MissingDependency,
+#     RSENotFound,
+#     RucioException,
+#     RuleNotFound,
+#     UnsupportedOperation,
+# )
 from rucio.common.extra import import_extras
 from rucio.common.test_rucio_server import TestRucioServer
 from rucio.common.utils import Color, StoreAndDeprecateWarningAction, chunks, detect_client_location, extract_scope, parse_did_filter_from_string, parse_did_filter_from_string_fe, setup_logger, sizefmt
@@ -605,44 +606,54 @@ def customUpload(args): #scope, file, meta, rse, bulk
     :param file: file path of the data file
     :param meta: file path of the .json metadata file
     '''
-    if args.bulk:
-        customUploadBulk(scope=did_scope, rse=args.rse, files=args.files, metas=args.metas)
+    client = get_client(args)
+    from rucio.client.uploadclient import UploadClient 
+    uplc = UploadClient(client, logger=logger)
+    
+    # Bulk upload from a .txt file with a data pfn metadata pfn pair, separated by a space, for each line
+    if args.bulk: 
+        if not args.txt:
+            raise ValueError("The --bulk flag requires --txt to be specified.")
+        else:
+            data_meta_pairs = []
+            with open(args.txt, 'r') as f:
+                for idx, line in enumerate(f, start=1):
+                    line = line.strip().split()
+                    # Verify the schema of the .txt file
+                    if len(line) != 2:
+                        raise ValueError(f"Line {idx}: Expected 2 elements but found {len(line)}")
+                    data_file, meta_file = line
+                    data_meta_pairs.append((data_file, meta_file))
     else:
-        client = get_client(args)
-        from rucio.client.uploadclient import UploadClient 
-        uplc = UploadClient(client, logger=logger)
-        did_name = args.file.split('/')[-1] # Use the file name as the DID name
+        # File and metadata pairs must be of the same number 
+        if len(args.files) != len(args.metas):
+            raise ValueError("The number of data files and metadata files must be the same.")
+        data_meta_pairs = zip(args.files, args.metas)
+
+    for file, meta in data_meta_pairs:
+        did_name = file.split('/')[-1] # Use the file name as the DID name
         did_scope = args.scope
         try:
             # Upload the file
             uplc.upload([{
-                'path': args.file,
+                'path': file,
                 'rse': args.rse,
                 'did_scope': did_scope,
                 'did_name': did_name,  
             }])
 
             # Parse the JSON file in a Python dict and add the "DID" and "sha-256" metadata
-            with open(args.meta, 'r') as m:
+            with open(meta, 'r') as m:
                 json_dict = json.load(m)
                 json_dict['LINK'] = f'{did_scope}:{did_name}'
-                json_dict['sha256'] = compute_sha256(args.file)
+                json_dict['sha256'] = compute_sha256(file)
                 json_string = json.dumps(json_dict)
 
             # Set the metadata for the uploaded file
             client.set_metadata(scope=did_scope, name=did_name, key='JSON', value=json_string)
-                
-            #did_name = file.split('/')[-1]
-            #for key, value in json_dict.items():
-            #    did_name = file.split('/')[-1]
-            #    self.didc.set_metadata(scope=scope, name=did_name, key=key, value=value)
 
         except Exception as e:
             print(f"Error: {e}")
-
-# Bulk version of upload for a list of pfn and metadata or a .txt file with pfn to the files you want to upload and their metadata (WIP...)
-def customUploadBulk(args): #scope, files, metas, rse
-    pass
     
 # Custom download for IDL-rucio Innovation Grant
 def customDownload(args): #scope, file, base_dir, no_subdir, bulk
@@ -651,7 +662,7 @@ def customDownload(args): #scope, file, base_dir, no_subdir, bulk
     else:
         client = get_client(args)
         from rucio.client.downloadclient import DownloadClient
-        dwnc = DownloadClient(client=client, logger=logger, check_admin=args.allow_tape)
+        dwnc = DownloadClient(client=client, logger=logger) #, check_admin=args.allow_tape
         name = args.file 
         # try: 
         #     name = file.split('/')[-1] # Use the file name as the DID name
@@ -702,22 +713,25 @@ def customGetMeta(args): #scope, name, plugin
     client = get_client(args)
     if args.plugin == "IDL":
         from rucio.client.downloadclient import DownloadClient
-        dwnc = DownloadClient(client=client, logger=logger, check_admin=args.allow_tape)
+        dwnc = DownloadClient(client=client, logger=logger) #, check_admin=args.allow_tape
         # Download of the file in /tmp/ without a subdir
-        tmp_file = dwnc.download_dids(items=[{'did': f'{args.scope}:{args.name}', 'base_dir': '/tmp/', 'no_subdir': True}])
+        scope = args.scope
+        name = args.name
+        base_dir = '/tmp/'
+        no_subdir = True
+        tmp_file = dwnc.download_dids(items=[{'did': f'{scope}:{name}', 'base_dir': base_dir, 'no_subdir': no_subdir}])
         hash_data = compute_sha256(tmp_file[0]['temp_file_path'][:-5])
-        name = hash_data + ':' + args.name
+        name = hash_data + ':' + name
         # After it is being used it is removed from /tmp/. You MUST have your donwloaded files in another directory!
         if os.path.exists(tmp_file[0]['temp_file_path'][:-5]):
             os.remove(tmp_file[0]['temp_file_path'][:-5])
         try:
             # Get the metadata for the specific DID
-            dict = client.get_metadata(plugin = "IDL", scope=args.scope, name=name)
+            meta = client.get_metadata(scope=scope, name=name, plugin="IDL")
             # Print the resulting dict in the same format as the rucio get-metadata
-            max_key_length = max(len(key) for key in dict.keys())
-            for keys, values in dict.items():
+            max_key_length = max(len(key) for key in meta.keys())
+            for keys, values in meta.items():
                 print(f"{keys}:".ljust(max_key_length + 1) + f"  {values}")
-
         except Exception as e:
             print(f"Error: {e}")
     else:
@@ -746,13 +760,17 @@ def customListDids(args): #scope, filters
         select_dict = {'sql_select': 'LINK'}
         filters.append(select_dict)
         res = list(client.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False))
-        max_list_len = len(str(abs(len(res))))
+        #max_list_len = len(str(abs(len(res))))
+        table = []
         for d in res:
-            #for key in d.keys():
-            #    if key == 'LINK':
-            #        d['LINK'] = d['LINK'][:-1]
-            print(f"{i}:".ljust(max_list_len + 1) + f"{json.dumps(d, indent=4)}\n")
-            i = i + 1
+            #print(f"{i}:".ljust(max_list_len + 1) + f"{json.dumps(d, indent=4)}\n")
+            #i = i + 1
+            scope_res = d["LINK"].split(':')[0]
+            name_res = d["LINK"].split(':')[1]
+            default_meta = client.get_metadata(plugin = "DID_COLUMN", scope=scope_res, name=name_res)
+            did_type = default_meta["did_type"]
+            table.append(['%s:%s' % (scope_res, name_res), did_type])
+        print(tabulate(table, tablefmt=tablefmt, headers=['SCOPE:NAME', '[DID TYPE]']))
     except Exception as e:
         print(f"Error: {e}")
 
@@ -766,24 +784,38 @@ def customQuery(args): #scope, select, filters
             for key, value in fil.items():
                 if key.startswith("EPOCH") or key.startswith("CREATION_DATE"):
                     value = np.datetime64(f'{value}')
-        i = 1
+        #i = 1
         # For now, I'm passing the SELECTs to the plugin via the filters
-        select_dict = {'sql_select': args.select + ', LINK'}
-        filters.append(select_dict)
-        res = list(client.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False))
-        max_list_len = len(str(abs(len(res))))
-        for d in res:
-            if "EPOCH" in d:
-                value = d["EPOCH"]
-                d["EPOCH"] = d["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{value.microsecond:06d}"
-            if "CREATION_DATE" in d:
-                d["CREATION_DATE"] = d["CREATION_DATE"].replace(' ', 'T')
-
-            # for key in d.keys():
-            #     if key == 'LINK':
-            #         d['LINK'] = d['LINK'][:-1]
-            print(f"{i}:".ljust(max_list_len + 1) + f"{json.dumps(d, indent=4)}\n")
-            i = i + 1
+        if args.select:
+            select_dict = {'sql_select': args.select + ', LINK'}
+            filters.append(select_dict)
+            res = list(client.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False))
+            #max_list_len = len(str(abs(len(res))))
+            for d in res:
+                # if "EPOCH" in d:
+                #     value = d["EPOCH"]
+                #     d["EPOCH"] = d["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{value.microsecond:06d}"
+                # if "CREATION_DATE" in d:
+                #     d["CREATION_DATE"] = d["CREATION_DATE"].replace(' ', 'T')
+                scope_res = d["LINK"].split(':')[0]
+                name_res = d["LINK"].split(':')[1]
+                default_meta = client.get_metadata(plugin = "DID_COLUMN", scope=scope_res, name=name_res)
+                did_type = default_meta["did_type"]
+                header_table = []
+                header_table.append(['%s:%s' % (scope_res, name_res), did_type])
+                print(tabulate(header_table, tablefmt=tablefmt, headers=[]))
+                table = []
+                for key, value in d.items():
+                    if key != "LINK":
+                        table.append([key, value])
+                print(tabulate(table, tablefmt=tablefmt, headers=['SELECT', 'VALUE']))
+                #print(f"{i}:".ljust(max_list_len + 1) + f"{json.dumps(d, indent=4)}")
+                # Include to know the width of the terminal at the runtime
+                import shutil
+                # Separator for each record returned by the query
+                print('\\' * shutil.get_terminal_size().columns)
+        else:
+            customListDids(args)
     except Exception as e:
         print(f"Error: {e}")
 
@@ -1755,7 +1787,7 @@ def get_parser():
                                                '\n'
                                                'To ping the server::\n'
                                                '\n'
-                                               '    $ rucio ping\n'
+                                               '    $ IDL ping\n'
                                                '    1.14.8\n'
                                                '\n'
                                                'The returned value is the version of Rucio installed on the server.'
@@ -1941,11 +1973,12 @@ You can filter by key/value, e.g.::
     +-------------------------------------------+--------------+
     ''')
 
-    ls_parser.set_defaults(function=list_dids)
-    ls_parser.add_argument('-r', '--recursive', dest='recursive', action='store_true', default=False, help='List data identifiers recursively.')
-    ls_parser.add_argument('--filter', dest='filter', action='store', help='Filter arguments in form `key=value,another_key=next_value`. Valid keys are name, type.')
-    ls_parser.add_argument('--short', dest='short', action='store_true', help='Just dump the list of DIDs.')
-    ls_parser.add_argument(dest='did', nargs=1, action='store', default=None, help='Data IDentifier pattern.')
+    ls_parser.set_defaults(function=customListDids)
+    #ls_parser.add_argument('-r', '--recursive', dest='recursive', action='store_true', default=False, help='List data identifiers recursively.')
+    ls_parser.add_argument("--filters", type=str, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used")
+    #ls_parser.add_argument('--short', dest='short', action='store_true', help='Just dump the list of DIDs.')
+    ls_parser.add_argument("--scope", type=str, required=True, help="Scope where to look for DIDs")
+    #ls_parser.add_argument(dest='did', nargs=1, action='store', default=None, help='Data IDentifier pattern.')
 
     list_parser = subparsers.add_parser('list-dids',
                                         help='List the data identifiers matching some metadata (synonym for ls).',
@@ -1984,51 +2017,62 @@ You can filter by key/value, e.g.::
     | user.jdoe:user.jdoe.test.cont.1234.2      | CONTAINER    |
     +-------------------------------------------+--------------+''')
 
-    list_parser.set_defaults(function=list_dids)
-    list_parser.add_argument('--recursive', dest='recursive', action='store_true', default=False, help='List data identifiers recursively.')
-    list_parser.add_argument('--filter', dest='filter', action='store', help='Single or logically combined filtering expression(s) either in the form <key><operator><value> or <value1><operator1><key><operator2><value2> (compound inequality). Keys are equivalent to columns in the DID table. Operators must belong to the set of (<=, >=, ==, !=, >, <). The following conventions for combining expressions are used: ";" represents the logical OR operator; "," represents the logical AND operator.')  # noqa: E501
-    list_parser.add_argument('--short', dest='short', action='store_true', help='Just dump the list of DIDs.')
-    list_parser.add_argument(dest='did', nargs=1, action='store', default=None, help='Data IDentifier pattern')
+    list_parser.set_defaults(function=customListDids)
+    #list_parser.add_argument('--recursive', dest='recursive', action='store_true', default=False, help='List data identifiers recursively.')
+    list_parser.add_argument("--filters", type=str, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used")
+    #list_parser.add_argument('--short', dest='short', action='store_true', help='Just dump the list of DIDs.')
+    list_parser.add_argument("--scope", type=str, required=True, help="Scope where to look for DIDs")
+    #list_parser.add_argument(dest='did', nargs=1, action='store', default=None, help='Data IDentifier pattern')
+
+    # Subparser sql query
+    pars_sql = subparsers.add_parser("sql", help="List of DIDs satisfying the filters, each one in a dictionary where the key are the SELECTs")
+    pars_sql.set_defaults(function=customQuery)
+    # Get's args and flags
+    pars_sql.add_argument("--scope", type=str, required=True, help="Scope")
+    pars_sql.add_argument("--filters", type=str, required=True, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used")
+    pars_sql.add_argument("--select", type=str, help="SELECTs for SQL queries, e.g. --select 'PARTICIPANT_1, EPOCH'. The LINK, which is the DID, is always present in the selects")
 
     # The extended version of list_dids that goes through the plugin mechanism
-    list_extended_parser = subparsers.add_parser('list-dids-extended',
-                                                 help='List the data identifiers matching some metadata (extended version to include metadata from various resources).',
-                                                 description='''List the Data IDentifiers matching certain pattern.
-Only the collections (i.e. dataset or container) are returned by default.
-With the filter option, you can specify a list of metadata that the Data IDentifier should match.
-Please use the filter option `--filter type=all` to find all types of Data IDentifiers.''',
-                                                 formatter_class=argparse.RawDescriptionHelpFormatter, epilog='''Usage example
-"""""""""""""
+#     list_extended_parser = subparsers.add_parser('list-dids-extended',
+#                                                  help='List the data identifiers matching some metadata (extended version to include metadata from various resources).',
+#                                                  description='''List the Data IDentifiers matching certain pattern.
+# Only the collections (i.e. dataset or container) are returned by default.
+# With the filter option, you can specify a list of metadata that the Data IDentifier should match.
+# Please use the filter option `--filter type=all` to find all types of Data IDentifiers.''',
+#                                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog='''Usage example
+# """""""""""""
 
-You can query the DIDs matching a certain pattern. It always requires to specify the scope in which you want to search::
+# You can query the DIDs matching a certain pattern. It always requires to specify the scope in which you want to search::
 
-    $ rucio list-dids --filter 'type=all' user.jdoe:*
-    +-------------------------------------------+--------------+
-    | SCOPE:NAME                                | [DID TYPE]   |
-    |-------------------------------------------+--------------|
-    | user.jdoe:user.jdoe.test.container.1234.1 | CONTAINER    |
-    | user.jdoe:user.jdoe.test.container.1234.2 | CONTAINER    |
-    | user.jdoe:user.jdoe.test.cont.1234.2      | CONTAINER    |
-    | user.jdoe:user.jdoe.test.dataset.1        | DATASET      |
-    | user.jdoe:user.jdoe.test.dataset.2        | DATASET      |
-    | user.jdoe:user.jdoe.test.data.1234.1      | DATASET      |
-    | user.jdoe:test.file.1                     | FILE         |
-    | user.jdoe:test.file.2                     | FILE         |
-    | user.jdoe:test.file.3                     | FILE         |
-    +-------------------------------------------+--------------+
+#     $ rucio list-dids --filter 'type=all' user.jdoe:*
+#     +-------------------------------------------+--------------+
+#     | SCOPE:NAME                                | [DID TYPE]   |
+#     |-------------------------------------------+--------------|
+#     | user.jdoe:user.jdoe.test.container.1234.1 | CONTAINER    |
+#     | user.jdoe:user.jdoe.test.container.1234.2 | CONTAINER    |
+#     | user.jdoe:user.jdoe.test.cont.1234.2      | CONTAINER    |
+#     | user.jdoe:user.jdoe.test.dataset.1        | DATASET      |
+#     | user.jdoe:user.jdoe.test.dataset.2        | DATASET      |
+#     | user.jdoe:user.jdoe.test.data.1234.1      | DATASET      |
+#     | user.jdoe:test.file.1                     | FILE         |
+#     | user.jdoe:test.file.2                     | FILE         |
+#     | user.jdoe:test.file.3                     | FILE         |
+#     +-------------------------------------------+--------------+
 
-You can filter by key/value, e.g.::
+# You can filter by key/value, e.g.::
 
-    $ rucio list-dids --filter 'type=CONTAINER'
-    +-------------------------------------------+--------------+
-    | SCOPE:NAME                                | [DID TYPE]   |
-    |-------------------------------------------+--------------|
-    | user.jdoe:user.jdoe.test.container.1234.1 | CONTAINER    |
-    | user.jdoe:user.jdoe.test.container.1234.2 | CONTAINER    |
-    | user.jdoe:user.jdoe.test.cont.1234.2      | CONTAINER    |
-    +-------------------------------------------+--------------+''')
+#     $ rucio list-dids --filter 'type=CONTAINER'
+#     +-------------------------------------------+--------------+
+#     | SCOPE:NAME                                | [DID TYPE]   |
+#     |-------------------------------------------+--------------|
+#     | user.jdoe:user.jdoe.test.container.1234.1 | CONTAINER    |
+#     | user.jdoe:user.jdoe.test.container.1234.2 | CONTAINER    |
+#     | user.jdoe:user.jdoe.test.cont.1234.2      | CONTAINER    |
+#     +-------------------------------------------+--------------+''')
 
-    list_extended_parser.set_defaults(function=list_dids_extended)
+#     list_extended_parser.set_defaults(function=list_dids_extended)
+
+
 ########################################################## END CUSTOM SECTION ###############################################################################
 
     # The list parent-dids command
@@ -2130,73 +2174,102 @@ You can filter by key/value, e.g.::
     list_content_history_parser.add_argument(dest='dids', nargs='+', action='store', help='List of space separated data identifiers.')
 
 ########################################################## CUSTOM SECTION ###############################################################################
-# The upload subparser
-    upload_parser = subparsers.add_parser('upload', help='Upload method.')
-    upload_parser.set_defaults(function=upload)
-    upload_parser.add_argument('--rse', dest='rse', action='store', help='Rucio Storage Element (RSE) name.', required=True).completer = rse_completer
-    upload_parser.add_argument('--lifetime', type=int, action='store', help='Lifetime of the rule in seconds.')
-    upload_parser.add_argument('--expiration-date', action='store', help='The date when the rule expires in UTC, format: <year>-<month>-<day>-<hour>:<minute>:<second>. E.g. 2022-10-20-20:00:00')
-    upload_parser.add_argument('--scope', dest='scope', action='store', help='Scope name.')
-    upload_parser.add_argument('--impl', dest='impl', action='store', help='Transfer protocol implementation to use (e.g: xrootd, gfal.NoRename, webdav, ssh.Rsync, rclone).')
-    # The --no-register option is hidden. This is pilot ONLY. Users should not use this. Will lead to unregistered data on storage!
-    upload_parser.add_argument('--no-register', dest='no_register', action='store_true', default=False, help=argparse.SUPPRESS)
-    upload_parser.add_argument('--register-after-upload', dest='register_after_upload', action='store_true', default=False, help='Register the file only after successful upload.')
-    upload_parser.add_argument('--summary', dest='summary', action='store_true', default=False, help='Create rucio_upload.json summary file')
-    upload_parser.add_argument('--guid', dest='guid', action='store', help='Manually specify the GUID for the file.')
-    upload_parser.add_argument('--protocol', action='store', help='Force the protocol to use')
-    upload_parser.add_argument('--pfn', dest='pfn', action='store', help='Specify the exact PFN for the upload.')
-    upload_parser.add_argument('--name', dest='name', action='store', help='Specify the exact LFN for the upload.')
-    upload_parser.add_argument('--transfer-timeout', dest='transfer_timeout', type=float, action='store', default=config_get_float('upload', 'transfer_timeout', False, 360), help='Transfer timeout (in seconds).')
-    upload_parser.add_argument(dest='args', action='store', nargs='+', help='files and datasets.')
-    upload_parser.add_argument('--recursive', dest='recursive', action='store_true', default=False, help='Convert recursively the folder structure into collections')
+    # Subparser upload
+    pars_upload = subparsers.add_parser("upload", help="Upload and set-metadata of a file")
+    pars_upload.set_defaults(function=customUpload)
+    # Upload's args and flags
+    pars_upload.add_argument("--scope", type=str, required=True, help="Scope")
+    pars_upload.add_argument("--rse", type=str, required=True, help="RSE expression")
+    pars_upload.add_argument("--files", type=str, nargs='+', help="File paths of the data files")
+    pars_upload.add_argument("--metas", type=str, nargs='+', help="File paths of the metadata files")
+    pars_upload.add_argument("--bulk", action='store_true', help="Flag to bulk upload data and metadata files.")
+    pars_upload.add_argument("--txt", type=str, help="Path to a .txt file containing data file and metadata file paths on each line.")
+    # # The upload subparser
+    # upload_parser = subparsers.add_parser('upload', help='Upload method.')
+    # upload_parser.set_defaults(function=customUpload)
+    # upload_parser.add_argument('--rse', dest='rse', action='store', help='Rucio Storage Element (RSE) name.', required=True).completer = rse_completer
+    # upload_parser.add_argument('--lifetime', type=int, action='store', help='Lifetime of the rule in seconds.')
+    # upload_parser.add_argument('--expiration-date', action='store', help='The date when the rule expires in UTC, format: <year>-<month>-<day>-<hour>:<minute>:<second>. E.g. 2022-10-20-20:00:00')
+    # upload_parser.add_argument('--scope', dest='scope', action='store', help='Scope name.')
+    # upload_parser.add_argument('--impl', dest='impl', action='store', help='Transfer protocol implementation to use (e.g: xrootd, gfal.NoRename, webdav, ssh.Rsync, rclone).')
+    # # The --no-register option is hidden. This is pilot ONLY. Users should not use this. Will lead to unregistered data on storage!
+    # upload_parser.add_argument('--no-register', dest='no_register', action='store_true', default=False, help=argparse.SUPPRESS)
+    # upload_parser.add_argument('--register-after-upload', dest='register_after_upload', action='store_true', default=False, help='Register the file only after successful upload.')
+    # upload_parser.add_argument('--summary', dest='summary', action='store_true', default=False, help='Create rucio_upload.json summary file')
+    # upload_parser.add_argument('--guid', dest='guid', action='store', help='Manually specify the GUID for the file.')
+    # upload_parser.add_argument('--protocol', action='store', help='Force the protocol to use')
+    # upload_parser.add_argument('--pfn', dest='pfn', action='store', help='Specify the exact PFN for the upload.')
+    # upload_parser.add_argument('--file', dest='file', action='store', help='Specify the exact LFN for the upload.')
+    # upload_parser.add_argument('--meta', dest='meta', action='store', help='Specify the exact LFN for the upload.')
+    # upload_parser.add_argument('--transfer-timeout', dest='transfer_timeout', type=float, action='store', default=config_get_float('upload', 'transfer_timeout', False, 360), help='Transfer timeout (in seconds).')
+    # #upload_parser.add_argument(dest='args', action='store', nargs='+', help='files and datasets.')
+    # upload_parser.add_argument('--bulk', dest='bulk', action='store_true', default=False, help='Convert recursively the folder structure into collections')
 
-    # The download and get subparser
-    get_parser = subparsers.add_parser('get', help='Download method (synonym for download)')
-    download_parser = subparsers.add_parser('download', help='Download method (synonym for get)')
-    for selected_parser in [get_parser, download_parser]:
-        selected_parser.set_defaults(function=download)
-        selected_parser.add_argument('--dir', dest='dir', default='.', action='store', help='The directory to store the downloaded file.')
-        selected_parser.add_argument(dest='dids', nargs='*', action='store', help='List of space separated data identifiers.')
-        selected_parser.add_argument('--allow-tape', action='store_true', default=False, help="Also consider tape endpoints as source of the download.")
-        selected_parser.add_argument('--rses', action='store', help='RSE Expression to specify allowed sources')
-        selected_parser.add_argument('--impl', dest='impl', action='store', help='Transfer protocol implementation to use (e.g: xrootd, gfal.NoRename, webdav, ssh.Rsync, rclone).')
-        selected_parser.add_argument('--protocol', action='store', help='Force the protocol to use.')
-        selected_parser.add_argument('--nrandom', type=int, action='store', help='Download N random files from the DID.')
-        selected_parser.add_argument('--ndownloader', type=int, default=3, action='store', help='Choose the number of parallel processes for download.')
-        selected_parser.add_argument('--no-subdir', action='store_true', default=False, help="Don't create a subdirectory for the scope of the files.")
-        selected_parser.add_argument('--pfn', dest='pfn', action='store', help="Specify the exact PFN for the download.")
-        selected_parser.add_argument('--archive-did', action='store', dest='archive_did', help="Download from archive is transparent. This option is obsolete.")
-        selected_parser.add_argument('--no-resolve-archives', action='store_true', default=False, help="If set archives will not be considered for download.")
-        selected_parser.add_argument('--ignore-checksum', action='store_true', default=False, help="Don't validate checksum for downloaded files.")
-        selected_parser.add_argument('--check-local-with-filesize-only', action='store_true', default=False, help="Don't use checksum verification for already downloaded files, use filesize instead.")
-        selected_parser.add_argument('--transfer-timeout', dest='transfer_timeout', type=float, action='store', default=config_get_float('download', 'transfer_timeout', False, None), help='Transfer timeout (in seconds). Default: computed dynamically from --transfer-speed-timeout. If set to any value >= 0, --transfer-speed-timeout is ignored.')  # NOQA: E501
-        selected_parser.add_argument('--transfer-speed-timeout', dest='transfer_speed_timeout', type=float, action='store', default=None, help='Minimum allowed average transfer speed (in KBps). Default: 500. Used to dynamically compute the timeout if --transfer-timeout not set. Is not supported for --pfn.')  # NOQA: E501
-        selected_parser.add_argument('--aria', action='store_true', default=False, help="Use aria2c utility if possible. (EXPERIMENTAL)")
-        selected_parser.add_argument('--trace_appid', '--trace-appid', new_option_string='--trace-appid', dest='trace_appid', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_APPID', None), help=argparse.SUPPRESS)
-        selected_parser.add_argument('--trace_dataset', '--trace-dataset', new_option_string='--trace-dataset', dest='trace_dataset', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_DATASET', None), help=argparse.SUPPRESS)
-        selected_parser.add_argument('--trace_datasetscope', '--trace-datasetscope', new_option_string='--trace-datasetscope', dest='trace_datasetscope', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_DATASETSCOPE', None), help=argparse.SUPPRESS)  # NOQA: E501
-        selected_parser.add_argument('--trace_eventtype', '--trace-eventtype', new_option_string='--trace-eventtype', dest='trace_eventtype', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_EVENTTYPE', None), help=argparse.SUPPRESS)  # NOQA: E501
-        selected_parser.add_argument('--trace_pq', '--trace-pq', new_option_string='--trace-pq', dest='trace_pq', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_PQ', None), help=argparse.SUPPRESS)
-        selected_parser.add_argument('--trace_taskid', '--trace-taskid', new_option_string='--trace-taskid', dest='trace_taskid', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_TASKID', None), help=argparse.SUPPRESS)
-        selected_parser.add_argument('--trace_usrdn', '--trace-usrdn', new_option_string='--trace-usrdn', dest='trace_usrdn', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_USRDN', None), help=argparse.SUPPRESS)
-        selected_parser.add_argument('--filter', dest='filter', action='store', help='Filter files by key-value pairs like guid=2e2232aafac8324db452070304f8d745.')
-        selected_parser.add_argument('--scope', dest='scope', action='store', help='Scope if you are using the filter option and no full DID.')
-        selected_parser.add_argument('--metalink', dest='metalink_file', action='store', help='Path to a metalink file.')
-        selected_parser.add_argument('--deactivate-file-download-exceptions', dest='deactivate_file_download_exceptions', action='store_true', help='Does not raise NoFilesDownloaded, NotAllFilesDownloaded or incorrect number of output queue files Exception.')  # NOQA: E501
-        selected_parser.add_argument('--replica-selection', dest='sort', action='store', help='Select the best replica using a replica sorting algorithm provided by replica sorter (e.g., random, geoip).')
+    # Subparser download
+    pars_alias = subparsers.add_parser("get", help="Alias for 'download'")
+    pars_download = subparsers.add_parser("download", help="Download a DID")
+    for select_pars in [pars_alias, pars_download]:
+        # Download's args and flags
+        select_pars.set_defaults(function=customDownload)
+        select_pars.add_argument("--scope", type=str, required=True, help="Scope")
+        select_pars.add_argument("--file", type=str, required=True, help="File path of the data file")
+        select_pars.add_argument("--base_dir", type=str, default=os.path.expanduser("~"), help="Base directory where the downloaded files will be stored. Default: '~'")
+        select_pars.add_argument("--no_subdir", type=bool, default=False, help="If true, files are written directly into base_dir. Default: False")
+        select_pars.add_argument("--bulk", type=bool, default=False, help="Download a list of files. Default: False [TO BE IMPLEMENTED]")
+    # # The download and get subparser
+    # get_parser = subparsers.add_parser('get', help='Download method (synonym for download)')
+    # download_parser = subparsers.add_parser('download', help='Download method (synonym for get)')
+    # for selected_parser in [get_parser, download_parser]:
+    #     selected_parser.set_defaults(function=download)
+    #     selected_parser.add_argument('--dir', dest='dir', default='.', action='store', help='The directory to store the downloaded file.')
+    #     selected_parser.add_argument(dest='dids', nargs='*', action='store', help='List of space separated data identifiers.')
+    #     selected_parser.add_argument('--allow-tape', action='store_true', default=False, help="Also consider tape endpoints as source of the download.")
+    #     selected_parser.add_argument('--rses', action='store', help='RSE Expression to specify allowed sources')
+    #     selected_parser.add_argument('--impl', dest='impl', action='store', help='Transfer protocol implementation to use (e.g: xrootd, gfal.NoRename, webdav, ssh.Rsync, rclone).')
+    #     selected_parser.add_argument('--protocol', action='store', help='Force the protocol to use.')
+    #     selected_parser.add_argument('--nrandom', type=int, action='store', help='Download N random files from the DID.')
+    #     selected_parser.add_argument('--ndownloader', type=int, default=3, action='store', help='Choose the number of parallel processes for download.')
+    #     selected_parser.add_argument('--no-subdir', action='store_true', default=False, help="Don't create a subdirectory for the scope of the files.")
+    #     selected_parser.add_argument('--pfn', dest='pfn', action='store', help="Specify the exact PFN for the download.")
+    #     selected_parser.add_argument('--archive-did', action='store', dest='archive_did', help="Download from archive is transparent. This option is obsolete.")
+    #     selected_parser.add_argument('--no-resolve-archives', action='store_true', default=False, help="If set archives will not be considered for download.")
+    #     selected_parser.add_argument('--ignore-checksum', action='store_true', default=False, help="Don't validate checksum for downloaded files.")
+    #     selected_parser.add_argument('--check-local-with-filesize-only', action='store_true', default=False, help="Don't use checksum verification for already downloaded files, use filesize instead.")
+    #     selected_parser.add_argument('--transfer-timeout', dest='transfer_timeout', type=float, action='store', default=config_get_float('download', 'transfer_timeout', False, None), help='Transfer timeout (in seconds). Default: computed dynamically from --transfer-speed-timeout. If set to any value >= 0, --transfer-speed-timeout is ignored.')  # NOQA: E501
+    #     selected_parser.add_argument('--transfer-speed-timeout', dest='transfer_speed_timeout', type=float, action='store', default=None, help='Minimum allowed average transfer speed (in KBps). Default: 500. Used to dynamically compute the timeout if --transfer-timeout not set. Is not supported for --pfn.')  # NOQA: E501
+    #     selected_parser.add_argument('--aria', action='store_true', default=False, help="Use aria2c utility if possible. (EXPERIMENTAL)")
+    #     selected_parser.add_argument('--trace_appid', '--trace-appid', new_option_string='--trace-appid', dest='trace_appid', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_APPID', None), help=argparse.SUPPRESS)
+    #     selected_parser.add_argument('--trace_dataset', '--trace-dataset', new_option_string='--trace-dataset', dest='trace_dataset', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_DATASET', None), help=argparse.SUPPRESS)
+    #     selected_parser.add_argument('--trace_datasetscope', '--trace-datasetscope', new_option_string='--trace-datasetscope', dest='trace_datasetscope', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_DATASETSCOPE', None), help=argparse.SUPPRESS)  # NOQA: E501
+    #     selected_parser.add_argument('--trace_eventtype', '--trace-eventtype', new_option_string='--trace-eventtype', dest='trace_eventtype', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_EVENTTYPE', None), help=argparse.SUPPRESS)  # NOQA: E501
+    #     selected_parser.add_argument('--trace_pq', '--trace-pq', new_option_string='--trace-pq', dest='trace_pq', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_PQ', None), help=argparse.SUPPRESS)
+    #     selected_parser.add_argument('--trace_taskid', '--trace-taskid', new_option_string='--trace-taskid', dest='trace_taskid', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_TASKID', None), help=argparse.SUPPRESS)
+    #     selected_parser.add_argument('--trace_usrdn', '--trace-usrdn', new_option_string='--trace-usrdn', dest='trace_usrdn', action=StoreAndDeprecateWarningAction, default=os.environ.get('RUCIO_TRACE_USRDN', None), help=argparse.SUPPRESS)
+    #     selected_parser.add_argument('--filter', dest='filter', action='store', help='Filter files by key-value pairs like guid=2e2232aafac8324db452070304f8d745.')
+    #     selected_parser.add_argument('--scope', dest='scope', action='store', help='Scope if you are using the filter option and no full DID.')
+    #     selected_parser.add_argument('--metalink', dest='metalink_file', action='store', help='Path to a metalink file.')
+    #     selected_parser.add_argument('--deactivate-file-download-exceptions', dest='deactivate_file_download_exceptions', action='store_true', help='Does not raise NoFilesDownloaded, NotAllFilesDownloaded or incorrect number of output queue files Exception.')  # NOQA: E501
+    #     selected_parser.add_argument('--replica-selection', dest='sort', action='store', help='Select the best replica using a replica sorting algorithm provided by replica sorter (e.g., random, geoip).')
 
-    # The get-metadata subparser
-    get_metadata_parser = subparsers.add_parser('get-metadata', help='Get metadata for DIDs.')
-    get_metadata_parser.set_defaults(function=get_metadata)
-    get_metadata_parser.add_argument(dest='dids', nargs='+', action='store', help='List of space separated data identifiers.')
-    get_metadata_parser.add_argument('--plugin', dest='plugin', action='store', help='Filter down to metadata from specific metadata plugin', required=False)
+    # Subparser get-metadata
+    pars_get = subparsers.add_parser("get-metadata", help="Get-metadata of a file")
+    pars_get.set_defaults(function=customGetMeta)
+    # Get's args and flags
+    pars_get.add_argument("--plugin", choices=['IDL', 'DID_COLUMN'], default="IDL", type=str, help="Plugin to use. Default: 'IDL'")
+    pars_get.add_argument("--scope", type=str, required=True, help="Scope")
+    pars_get.add_argument("--name", type=str, required=True, help="Name of the DID")
+    # # The get-metadata subparser
+    # get_metadata_parser = subparsers.add_parser('get-metadata', help='Get metadata for DIDs.')
+    # get_metadata_parser.set_defaults(function=get_metadata)
+    # get_metadata_parser.add_argument(dest='dids', nargs='+', action='store', help='List of space separated data identifiers.')
+    # get_metadata_parser.add_argument('--plugin', dest='plugin', action='store', help='Filter down to metadata from specific metadata plugin', required=False)
 
     # The set-metadata subparser
-    set_metadata_parser = subparsers.add_parser('set-metadata', help='set-metadata method')
-    set_metadata_parser.set_defaults(function=set_metadata)
-    set_metadata_parser.add_argument('--did', dest='did', action='store', help='Data identifier whose metadata will be set', required=True)
-    set_metadata_parser.add_argument('--key', dest='key', action='store', help='Attribute key', required=True)
-    set_metadata_parser.add_argument('--value', dest='value', action='store', help='Attribute value', required=True)
+    # set_metadata_parser = subparsers.add_parser('set-metadata', help='set-metadata method')
+    # set_metadata_parser.set_defaults(function=set_metadata)
+    # set_metadata_parser.add_argument('--did', dest='did', action='store', help='Data identifier whose metadata will be set', required=True)
+    # set_metadata_parser.add_argument('--key', dest='key', action='store', help='Attribute key', required=True)
+    # set_metadata_parser.add_argument('--value', dest='value', action='store', help='Attribute value', required=True)
 
     # delete-did-meta subparser
     delete_metadata_parser = subparsers.add_parser('delete-metadata', help='delete metadata')
