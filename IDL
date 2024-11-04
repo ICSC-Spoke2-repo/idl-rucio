@@ -2448,95 +2448,95 @@ can be found in ' + Color.BOLD + 'http://rucio.cern.ch/documentation/rse_express
     return oparser     
 
 # TO BE IMPLEMENTED IN THE get_parser method...
-def main():
-    # Setup argument parser
-    parser = argparse.ArgumentParser(description="IDL client: upload (+ set-metadata), get-metadata and SQL queries with custom plugin") # This is the description of the binary if you read the help message {-h, --help}
+# def main():
+#     # Setup argument parser
+#     parser = argparse.ArgumentParser(description="IDL client: upload (+ set-metadata), get-metadata and SQL queries with custom plugin") # This is the description of the binary if you read the help message {-h, --help}
     
-    # Subparsers
-    subpars = parser.add_subparsers(dest="method", help="Available methods")
+#     # Subparsers
+#     subpars = parser.add_subparsers(dest="method", help="Available methods")
 
-    # Subparser upload
-    pars_upload = subpars.add_parser("upload", help="Upload and set-metadata of a file")
-    # Upload's args and flags
-    pars_upload.add_argument("--scope", type=str, required=True, help="Scope")
-    pars_upload.add_argument("--rse", type=str, required=True, help="RSE expression")
-    pars_upload.add_argument("--file", type=str, required=True, help="File path of the data file")
-    pars_upload.add_argument("--meta", type=str, required=True, help="File path of the metadata file")
-    pars_upload.add_argument("--bulk", type=bool, default=False, help="Upload a list of files. Default: False [TO BE IMPLEMENTED]")
+#     # Subparser upload
+#     pars_upload = subpars.add_parser("upload", help="Upload and set-metadata of a file")
+#     # Upload's args and flags
+#     pars_upload.add_argument("--scope", type=str, required=True, help="Scope")
+#     pars_upload.add_argument("--rse", type=str, required=True, help="RSE expression")
+#     pars_upload.add_argument("--file", type=str, required=True, help="File path of the data file")
+#     pars_upload.add_argument("--meta", type=str, required=True, help="File path of the metadata file")
+#     pars_upload.add_argument("--bulk", type=bool, default=False, help="Upload a list of files. Default: False [TO BE IMPLEMENTED]")
 
-    # Subparser download
-    pars_download = subpars.add_parser("download", help="Download a DID")
-    # Download's args and flags
-    pars_download.add_argument("--scope", type=str, required=True, help="Scope")
-    pars_download.add_argument("--file", type=str, required=True, help="File path of the data file")
-    pars_download.add_argument("--base_dir", type=str, default=os.path.expanduser("~"), help="Base directory where the downloaded files will be stored. Default: '~'")
-    pars_download.add_argument("--no_subdir", type=bool, default=False, help="If true, files are written directly into base_dir. Default: False")
-    pars_download.add_argument("--bulk", type=bool, default=False, help="Download a list of files. Default: False [TO BE IMPLEMENTED]")
+#     # Subparser download
+#     pars_download = subpars.add_parser("download", help="Download a DID")
+#     # Download's args and flags
+#     pars_download.add_argument("--scope", type=str, required=True, help="Scope")
+#     pars_download.add_argument("--file", type=str, required=True, help="File path of the data file")
+#     pars_download.add_argument("--base_dir", type=str, default=os.path.expanduser("~"), help="Base directory where the downloaded files will be stored. Default: '~'")
+#     pars_download.add_argument("--no_subdir", type=bool, default=False, help="If true, files are written directly into base_dir. Default: False")
+#     pars_download.add_argument("--bulk", type=bool, default=False, help="Download a list of files. Default: False [TO BE IMPLEMENTED]")
 
-    # Subparser get-metadata
-    pars_get = subpars.add_parser("get-metadata", help="Get-metadata of a file")
-    # Get's args and flags
-    pars_get.add_argument("--plugin", choices=['IDL', 'DID_COLUMN'], default="IDL", type=str, help="Plugin to use. Default: 'IDL'")
-    pars_get.add_argument("--scope", type=str, required=True, help="Scope")
-    pars_get.add_argument("--name", type=str, required=True, help="Name of the DID")
+#     # Subparser get-metadata
+#     pars_get = subpars.add_parser("get-metadata", help="Get-metadata of a file")
+#     # Get's args and flags
+#     pars_get.add_argument("--plugin", choices=['IDL', 'DID_COLUMN'], default="IDL", type=str, help="Plugin to use. Default: 'IDL'")
+#     pars_get.add_argument("--scope", type=str, required=True, help="Scope")
+#     pars_get.add_argument("--name", type=str, required=True, help="Name of the DID")
 
-    # Subparser list-dids
-    pars_list = subpars.add_parser("list-dids", help="List of DIDs satisfying the filters")
-    # List-dids' args and flags
-    pars_list.add_argument("--scope", type=str, required=True, help="Scope")
-    pars_list.add_argument("--filters", type=str, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used")
+#     # Subparser list-dids
+#     pars_list = subpars.add_parser("list-dids", help="List of DIDs satisfying the filters")
+#     # List-dids' args and flags
+#     pars_list.add_argument("--scope", type=str, required=True, help="Scope")
+#     pars_list.add_argument("--filters", type=str, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used")
 
-    # Subparser sql query
-    pars_sql = subpars.add_parser("sql", help="List of DIDs satisfying the filters, each one in a dictionary where the key are the SELECTs")
-    # Get's args and flags
-    pars_sql.add_argument("--scope", type=str, required=True, help="Scope")
-    pars_sql.add_argument("--filters", type=str, required=True, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used")
-    pars_sql.add_argument("--select", type=str, help="SELECTs for SQL queries, e.g. --select 'PARTICIPANT_1, EPOCH'. The LINK, which is the DID, is always present in the selects")
+#     # Subparser sql query
+#     pars_sql = subpars.add_parser("sql", help="List of DIDs satisfying the filters, each one in a dictionary where the key are the SELECTs")
+#     # Get's args and flags
+#     pars_sql.add_argument("--scope", type=str, required=True, help="Scope")
+#     pars_sql.add_argument("--filters", type=str, required=True, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used")
+#     pars_sql.add_argument("--select", type=str, help="SELECTs for SQL queries, e.g. --select 'PARTICIPANT_1, EPOCH'. The LINK, which is the DID, is always present in the selects")
 
-    # Subparser add-dataset
-    pars_add_dataset = subpars.add_parser("add-dataset", help="Add a dataset")
-    # Add-collection's args and flags
-    pars_add_dataset.add_argument("--scope", type=str, required=True, help="Scope")
-    pars_add_dataset.add_argument("--name", type=str, required=True, help="Name of the dataset")
-    pars_add_dataset.add_argument("--statuses", type=str, help="Dictionary with statuses, e.g. {'monotonic':True}")
-    pars_add_dataset.add_argument("--meta", type=str, help="'DID_COLUMN' metadata of the dataset")
-    pars_add_dataset.add_argument("--files", type=str, help="Content of the dataset. List of file paths")
-    pars_add_dataset.add_argument("--rse", type=str, help="RSE expression")
+#     # Subparser add-dataset
+#     pars_add_dataset = subpars.add_parser("add-dataset", help="Add a dataset")
+#     # Add-collection's args and flags
+#     pars_add_dataset.add_argument("--scope", type=str, required=True, help="Scope")
+#     pars_add_dataset.add_argument("--name", type=str, required=True, help="Name of the dataset")
+#     pars_add_dataset.add_argument("--statuses", type=str, help="Dictionary with statuses, e.g. {'monotonic':True}")
+#     pars_add_dataset.add_argument("--meta", type=str, help="'DID_COLUMN' metadata of the dataset")
+#     pars_add_dataset.add_argument("--files", type=str, help="Content of the dataset. List of file paths")
+#     pars_add_dataset.add_argument("--rse", type=str, help="RSE expression")
 
-    # Subparser add-container
-    pars_add_container = subpars.add_parser("add-container", help="Add a container")
-    # Add-collection's args and flags
-    pars_add_container.add_argument("--scope", type=str, required=True, help="Scope")
-    pars_add_container.add_argument("--name", type=str, required=True, help="Name of the container")
-    pars_add_container.add_argument("--statuses", type=str, help="Dictionary with statuses, e.g. {'monotonic':True}")
-    pars_add_container.add_argument("--meta", type=str, help="'DID_COLUMN' metadata of the container")
+#     # Subparser add-container
+#     pars_add_container = subpars.add_parser("add-container", help="Add a container")
+#     # Add-collection's args and flags
+#     pars_add_container.add_argument("--scope", type=str, required=True, help="Scope")
+#     pars_add_container.add_argument("--name", type=str, required=True, help="Name of the container")
+#     pars_add_container.add_argument("--statuses", type=str, help="Dictionary with statuses, e.g. {'monotonic':True}")
+#     pars_add_container.add_argument("--meta", type=str, help="'DID_COLUMN' metadata of the container")
 
-    # Enable autocomplete
-    argcomplete.autocomplete(parser)
+    # # Enable autocomplete
+    # argcomplete.autocomplete(parser)
 
-    # Parse arguments
-    args = parser.parse_args()
+    # # Parse arguments
+    # args = parser.parse_args()
 
-    # Call the chosen method
-    if args.method == 'add-dataset':
-        myClass.add_dataset(args.scope, args.name, args.rse, args.statuses, args.meta, args.files)
-    elif args.method == 'add-container':
-        myClass.add_dataset(args.scope, args.name, args.statuses, args.meta)
-    elif args.method == 'upload':
-        myClass.customUpload(args.scope, args.file, args.meta, args.rse, args.bulk)
-    elif args.method == 'download':
-        myClass.customDownload(args.scope, args.file, args.base_dir, args.no_subdir, args.bulk)
-    #elif args.method == 'set':
-    #    myClass.customSetMeta(args.scope, args.file, args.meta)
-    elif args.method == 'get-metadata':
-        myClass.customGetMeta(args.scope, args.name, args.plugin) 
-    elif args.method == 'list-dids':
-        myClass.customListDids(args.scope, args.filters) #ast.literal_eval(args.filters))
-    elif args.method == 'sql':
-        myClass.customQuery(args.scope, args.select, args.filters)
-    else:
-        # If no method is selected, print the general help
-        parser.print_help()
+    # # Call the chosen method
+    # if args.method == 'add-dataset':
+    #     myClass.add_dataset(args.scope, args.name, args.rse, args.statuses, args.meta, args.files)
+    # elif args.method == 'add-container':
+    #     myClass.add_dataset(args.scope, args.name, args.statuses, args.meta)
+    # elif args.method == 'upload':
+    #     myClass.customUpload(args.scope, args.file, args.meta, args.rse, args.bulk)
+    # elif args.method == 'download':
+    #     myClass.customDownload(args.scope, args.file, args.base_dir, args.no_subdir, args.bulk)
+    # #elif args.method == 'set':
+    # #    myClass.customSetMeta(args.scope, args.file, args.meta)
+    # elif args.method == 'get-metadata':
+    #     myClass.customGetMeta(args.scope, args.name, args.plugin) 
+    # elif args.method == 'list-dids':
+    #     myClass.customListDids(args.scope, args.filters) #ast.literal_eval(args.filters))
+    # elif args.method == 'sql':
+    #     myClass.customQuery(args.scope, args.select, args.filters)
+    # else:
+    #     # If no method is selected, print the general help
+    #     parser.print_help()
 
 
 if __name__ == '__main__':
