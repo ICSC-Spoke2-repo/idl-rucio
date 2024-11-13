@@ -56,7 +56,7 @@ from rucio.common import exception
 # )
 from rucio.common.extra import import_extras
 from rucio.common.test_rucio_server import TestRucioServer
-from rucio.common.utils import Color, StoreAndDeprecateWarningAction, chunks, detect_client_location, extract_scope, parse_did_filter_from_string, parse_did_filter_from_string_fe, setup_logger, sizefmt
+from rucio.common.utils import sha256, Color, StoreAndDeprecateWarningAction, chunks, detect_client_location, extract_scope, parse_did_filter_from_string, parse_did_filter_from_string_fe, setup_logger, sizefmt
 
 # Includes for the custom client
 import argcomplete
@@ -78,18 +78,18 @@ def compute_sha256(file_path):
     return hash_sha256.hexdigest()
 
 # Function to map operators to corresponding SQL-friendly keys
-def get_operator_key(field, operator):
-    if operator != '=':
-        operator_map = {
-            '>=': 'gte',
-            '<=': 'lte',
-            '>': 'gt',
-            '<': 'lt',
-            '!=': 'ne',
-        }
-        return f"{field}.{operator_map[operator]}"
-    else:
-        return f"{field}"
+#def get_operator_key(field, operator):
+#    if operator != '=':
+#        operator_map = {
+#            '>=': 'gte',
+#            '<=': 'lte',
+#            '>': 'gt',
+#            '<': 'lt',
+#            '!=': 'ne',
+#        }
+#        return f"{field}.{operator_map[operator]}"
+#    else:
+#        return f"{field}"
 
 # Function to parse filters from string with logical operators AND, OR to a list of dicts as in rucio's filter engine
 def parse_filters(input_str):
@@ -108,8 +108,8 @@ def parse_filters(input_str):
             
             if match:
                 field, operator, value = match.groups()
-                operator_key = get_operator_key(field, operator)
-                and_dict[operator_key] = value.strip()
+                #operator_key = get_operator_key(field, operator)
+                and_dict[f"{field}.{operator}"] = value.strip() #and_dict[operator_key] = value.strip()
         
         filters.append(and_dict)
 
@@ -611,19 +611,20 @@ def customUpload(args): #scope, file, meta, rse, bulk
     uplc = UploadClient(client, logger=logger)
     
     # Bulk upload from a .txt file with a data pfn metadata pfn pair, separated by a space, for each line
-    if args.bulk: 
-        if not args.txt:
-            raise ValueError("The --bulk flag requires --txt to be specified.")
-        else:
-            data_meta_pairs = []
-            with open(args.txt, 'r') as f:
-                for idx, line in enumerate(f, start=1):
-                    line = line.strip().split()
-                    # Verify the schema of the .txt file
-                    if len(line) != 2:
-                        raise ValueError(f"Line {idx}: Expected 2 elements but found {len(line)}")
-                    data_file, meta_file = line
-                    data_meta_pairs.append((data_file, meta_file))
+    if args.bulk and not args.txt: 
+        raise ValueError("The --bulk flag requires --txt to be specified.")
+    elif args.bulk and args.txt:
+        data_meta_pairs = []
+        with open(args.txt, 'r') as f:
+            for idx, line in enumerate(f, start=1):
+                line = line.strip().split()
+                # Verify the schema of the .txt file
+                if len(line) != 2:
+                    raise ValueError(f"Line {idx}: Expected 2 elements but found {len(line)}")
+                data_file, meta_file = line
+                data_meta_pairs.append((data_file, meta_file))
+    elif not args.bulk and args.txt:
+        raise ValueError("The --txt argument is meant to be used for --bulk upload")
     else:
         # File and metadata pairs must be of the same number 
         if len(args.files) != len(args.metas):
@@ -646,7 +647,7 @@ def customUpload(args): #scope, file, meta, rse, bulk
             with open(meta, 'r') as m:
                 json_dict = json.load(m)
                 json_dict['LINK'] = f'{did_scope}:{did_name}'
-                json_dict['sha256'] = compute_sha256(file)
+                json_dict['sha256'] = sha256(file)
                 json_string = json.dumps(json_dict)
 
             # Set the metadata for the uploaded file

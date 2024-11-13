@@ -38,11 +38,11 @@ import time
 
 from adbc.core.adbc import adbc_1liner__write_record__wrapper
 from adbc.core.adbc import adbc_1liner__delete_record__wrapper
-from adbc.core.adbc import adbc_1liner__read_record__wrapper
+#from adbc.core.adbc import adbc_1liner__read_record__wrapper
 from adbc.core.adbc import adbc_1liner__sql__wrapper
 from adbc.core.adbc import adbc_1liner__dump_table_to_warehouse__wrapper, adbc_1liner__dump_table_ild_metadata_to_warehouse
-from adbc.core.adbc_pipelined import multi_pipelined_read__wrapper
-from adbc.core.adbc_pipelined import multi_pipelined_write__wrapper
+#from adbc.core.adbc_pipelined import multi_pipelined_read__wrapper
+#from adbc.core.adbc_pipelined import multi_pipelined_write__wrapper
 from adbc.core.adbc import adbc__generate_record_key_from_field
 
 # For conversion of metadata CREATION_DATE and EPOCH
@@ -131,9 +131,9 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 # }
 
         # Field labels for the table dump in the internal warehouse of AyraDB (you can omit the fixed value labels)
+        #self.field_labels_string = 'IDL_L4_VERS,LINK' 
         self.field_labels_string = 'IDL_L4_VERS,COMMENT,CREATION_DATE,ORIGINATOR,TIME_SYSTEM,EPOCH,PARTICIPANT_1,PARTICIPANT_2,PATH,REFERENCE_FRAME,MEAS_TYPE,MEAS_FORMAT,MEAS_UNIT,DATA_QUALITY,LINK'
-        self.field_labels = ['*']
-
+        
         ########## blockchain ##################
         self.blockchainUrl = "https://vm-131-154-99-190.cloud.cnaf.infn.it:3000"
         self.headers = {"content-type": "application/x-www-form-urlencoded"}
@@ -258,21 +258,18 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         #print(self.credentials)
         
         # Constant SQL query to retrieve the metadata of a DID
-        # const_sql_query = f"SELECT * FROM ayradb.metadata WHERE LINK='{scope.internal}:{clean_name}';"
+        const_sql_query = f"SELECT * FROM ayradb.metadata WHERE LINK='{scope.internal}:{clean_name}';"
 
         # Debug
-        # print(const_sql_query)
+        print(const_sql_query)
 
-        key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, clean_name))
-
-        # res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, const_sql_query, warehouse_query=True)          
-        res, error, record = adbc_1liner__read_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.field_labels)
+        res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, const_sql_query, warehouse_query=True)          
 
         # Debug
-        print(record)
+        print(records)
 
         # Convert the Python dict from bytearrays to strings
-        converted_dict = self.convert_bytearrays(record)
+        converted_dict = self.convert_bytearrays(records[len(records)-1])
 
         # Debug
         print('###############################')
@@ -281,20 +278,18 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
         ######## blockchain ###########
         # Computation of metadata_hash for the get_from_blockchain method  
-        metahash_dict = {keys: values for keys, values in converted_dict.items()}
+        metahash_dict = {keys: values for keys, values in converted_dict.items() if keys != 'id'}
 
         print(metahash_dict)
 
         # string = metahash_dict["EPOCH"]
         # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
-        # The next two lines are needed because during set_metadata the metadata_hash for the blockchain has been computed with "2024-09-14T23:20:02.120928" format, but when it is returned by the DB cluster it has a space instead of the 'T'
-        # If you don't do this replacement, the metadata_hash computed in line 292 will be different and the validate_data will return Fals
-        # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].replace(' ', 'T')
-        # metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
+        metahash_dict["EPOCH"] = metahash_dict["EPOCH"].replace(' ', 'T')
+        metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
 
         metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
 
-        # print(metahash_dict)
+        print(metahash_dict)
 
         try: 
             print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash)) 
@@ -309,31 +304,6 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             print(f'ERROR: retrieving the metadata: {error}')
         elif res == True:
             return converted_dict
-        
-    def get_metadata_bulk(self, dids):
-        hash_data_list = []
-        keys = []
-        for did in dids:
-            hash_data = did['name'].split('$')[0]
-            hash_data_list.append(hash_data)
-            did['name'] = did['name'].split('$')[1]
-            key = adbc__generate_record_key_from_field('{}:{}'.format(did['scope'], did['name']))
-            keys.append(key)
-        
-        res_read, error, records = multi_pipelined_read__wrapper(self.table_name, self.field_labels, self.ayradb_servers, keys, credentials=self.credentials)
-
-        if res_read == False:
-            print(f'Error: {error}')
-        else:
-            converted_dicts = self.convert_bytearrays(records)
-            for idx, record in enumerate(converted_dicts):
-                metadata_hash = adbc__generate_record_key_from_field(str(record))
-                try: 
-                    print(self.get_from_blockchain(data_hash=hash_data_list[idx], metadata_hash=metadata_hash)) 
-                except:
-                    # Exception management to avoid internal errors due to possible blockchain server errors
-                    print('ERROR: contacting blockchain')
-            return converted_dicts
 
     def delete_metadata(self, scope, name, key, *, session: "Optional[Session]" = None):
         """
