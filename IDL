@@ -35,25 +35,25 @@ from rucio.client import Client
 from rucio.common.config import config_get, config_get_float
 from rucio.common.constants import ReplicaState
 from rucio.common import exception
-# from rucio.common.exception import (
-#     AccessDenied,
-#     CannotAuthenticate,
-#     DataIdentifierAlreadyExists,
-#     DataIdentifierNotFound,
-#     DIDFilterSyntaxError,
-#     DuplicateContent,
-#     DuplicateCriteriaInDIDFilter,
-#     DuplicateRule,
-#     InputValidationError,
-#     InvalidObject,
-#     InvalidRSEExpression,
-#     InvalidType,
-#     MissingDependency,
-#     RSENotFound,
-#     RucioException,
-#     RuleNotFound,
-#     UnsupportedOperation,
-# )
+from rucio.common.exception import (
+    AccessDenied,
+    CannotAuthenticate,
+    DataIdentifierAlreadyExists,
+    DataIdentifierNotFound,
+    DIDFilterSyntaxError,
+    DuplicateContent,
+    DuplicateCriteriaInDIDFilter,
+    DuplicateRule,
+    InputValidationError,
+    InvalidObject,
+    InvalidRSEExpression,
+    InvalidType,
+    MissingDependency,
+    RSENotFound,
+    RucioException,
+    RuleNotFound,
+    UnsupportedOperation
+)
 from rucio.common.extra import import_extras
 from rucio.common.test_rucio_server import TestRucioServer
 from rucio.common.utils import sha256, Color, StoreAndDeprecateWarningAction, chunks, detect_client_location, extract_scope, parse_did_filter_from_string, parse_did_filter_from_string_fe, setup_logger, sizefmt
@@ -714,33 +714,69 @@ def customGetMeta(args): #scope, name, plugin
     client = get_client(args)
     if args.plugin == "IDL":
         from rucio.client.downloadclient import DownloadClient
-        dwnc = DownloadClient(client=client, logger=logger) #, check_admin=args.allow_tape
-        # Download of the file in /tmp/ without a subdir
-        scope = args.scope
-        name = args.name
-        base_dir = '/tmp/'
-        no_subdir = True
-        tmp_file = dwnc.download_dids(items=[{'did': f'{scope}:{name}', 'base_dir': base_dir, 'no_subdir': no_subdir}])
-        hash_data = compute_sha256(tmp_file[0]['temp_file_path'][:-5])
-        name = hash_data + ':' + name
-        # After it is being used it is removed from /tmp/. You MUST have your donwloaded files in another directory!
-        if os.path.exists(tmp_file[0]['temp_file_path'][:-5]):
-            os.remove(tmp_file[0]['temp_file_path'][:-5])
+        dwnc = DownloadClient(client=client) #, logger=logger, check_admin=args.allow_tape
+        #if args.dids != None:
+            #if len(args.dids) > 1:
+            #    print(args.dids)
         try:
-            # Get the metadata for the specific DID
-            meta = client.get_metadata(scope=scope, name=name, plugin="IDL")
+            #dids = []
+            for did in args.dids:
+                # Download of the file in /tmp/ without a subdir
+                scope = did.split(':')[0]
+                name = did.split(':')[1]
+                base_dir = '/tmp/'
+                no_subdir = True
+                tmp_file = dwnc.download_dids(items=[{'did': f'{scope}:{name}', 'base_dir': base_dir, 'no_subdir': no_subdir}])
+                hash_data = sha256(tmp_file[0]['temp_file_path'][:-5])
+                name = hash_data + ':' + name
+                #dids.append({'scope': scope, 'name': name})#, 'md5': hash_data})
+                # After it is being used it is removed from /tmp/. You MUST have your donwloaded files in another directory!
+                if os.path.exists(tmp_file[0]['temp_file_path'][:-5]):
+                    os.remove(tmp_file[0]['temp_file_path'][:-5])
+                # Get metadatas for the DIDs
+                metas = client.get_metadata(scope=scope, name=name, plugin="IDL")
+                #for i, meta in enumerate(metas):
+                #    if i > 0:
+                #        print('------')
+                table = [(k + ':', str(v)) for (k, v) in sorted(metas.items())]
+                print(tabulate(table, tablefmt='plain', disable_numparse=True))
+            return SUCCESS
+        except Exception as e:
+            print(f"Error:{e}")
+        #else:
+            # # Download of the file in /tmp/ without a subdir
+            # scope = args.dids.split(':')[0]
+            # name = args.dids.split(':')[1]
+            # base_dir = '/tmp/'
+            # no_subdir = True
+            # tmp_file = dwnc.download_dids(items=[{'did': f'{scope}:{name}', 'base_dir': base_dir, 'no_subdir': no_subdir}])
+            # hash_data = sha256(tmp_file[0]['temp_file_path'][:-5])
+            # name = hash_data + ':' + name
+            # # After it is being used it is removed from /tmp/. You MUST have your donwloaded files in another directory!
+            # if os.path.exists(tmp_file[0]['temp_file_path'][:-5]):
+            #     os.remove(tmp_file[0]['temp_file_path'][:-5])
+            # try:
+            #     # Get the metadata for the specific DID
+            #     meta = client.get_metadata(scope=scope, name=name, plugin="IDL")
+            #     table = [(k + ':', str(v)) for (k, v) in sorted(meta.items())]
+            #     print(tabulate(table, tablefmt='plain', disable_numparse=True))
+            #     return SUCCESS
+            # except Exception as e:
+            #     print(f"Error: {e}")
+    else:
+        try:
+            for i, did in enumerate(args.dids):
+                if i > 0:
+                    print('------')
+                scope, name = get_scope(did, client)
+                meta = client.get_metadata(scope=scope, name=name, plugin="DID_COLUMN")
+                table = [(k + ':', str(v)) for (k, v) in sorted(meta.items())]
+                print(tabulate(table, tablefmt='plain', disable_numparse=True))
+            return SUCCESS
+            meta = client.get_metadata(plugin = "DID_COLUMN", scope=args.scope, name=args.name)
             # Print the resulting dict in the same format as the rucio get-metadata
             max_key_length = max(len(key) for key in meta.keys())
             for keys, values in meta.items():
-                print(f"{keys}:".ljust(max_key_length + 1) + f"  {values}")
-        except Exception as e:
-            print(f"Error: {e}")
-    else:
-        try:
-            dict = client.get_metadata(plugin = "DID_COLUMN", scope=args.scope, name=args.name)
-            # Print the resulting dict in the same format as the rucio get-metadata
-            max_key_length = max(len(key) for key in dict.keys())
-            for keys, values in dict.items():
                 print(f"{keys}:".ljust(max_key_length + 1) + f"  {values}")
         except Exception as e:
             print(f"Error: {e}")
@@ -2257,8 +2293,9 @@ You can filter by key/value, e.g.::
     pars_get.set_defaults(function=customGetMeta)
     # Get's args and flags
     pars_get.add_argument("--plugin", choices=['IDL', 'DID_COLUMN'], default="IDL", type=str, help="Plugin to use. Default: 'IDL'")
-    pars_get.add_argument("--scope", type=str, required=True, help="Scope")
-    pars_get.add_argument("--name", type=str, required=True, help="Name of the DID")
+    #pars_get.add_argument("--scope", type=str, help="Scope")
+    #pars_get.add_argument("--name", type=str, help="Name of the DID")
+    pars_get.add_argument("--dids", type=str, nargs='+', help="List of DIDs" )
     # # The get-metadata subparser
     # get_metadata_parser = subparsers.add_parser('get-metadata', help='Get metadata for DIDs.')
     # get_metadata_parser.set_defaults(function=get_metadata)
