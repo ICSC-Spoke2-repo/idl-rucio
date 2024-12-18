@@ -8,7 +8,7 @@
   - [Rucio Server](#rucio-server)
     - [Local-path-provisioner TMP](#local-path-provisioner-TMP)
     - [Server Networking](#Server-Networking)
-  - [S3 Storage Endpoint(s)](#S3-Storage-Endpoint(s))
+  - [S3 Storage Endpoint](#S3-Storage-Endpoint)
     - [Configuration](#Configuration)
 - [IDL-dedicated components](#IDL-dedicated-components)
   - [Custom policies](#Custom-policies)
@@ -42,15 +42,59 @@ A key aspect of this work involves extending **Rucio**, an open-source data mana
 
 ## Getting Started
 
+_**NOTE**: run once export KUBECONFIG=/etc/rancher/rke2/rke2.yaml in each new terminal window, otherwise add it in the .bashrc file. Also add `export PATH="/path/to/kubectl:$PATH"` to your .bashrc file in order to use kubectl directly._
+
+Git clone repository (**TMP for the prototype**): 
+- https://github.com/rucio/k8s-tutorial.git 
+
+Install kubectl: 
+- https://kubernetes.io/docs/tasks/tools/install-kubectl/
+
+Install helm: 
+- https://helm.sh/docs/intro/install/
+
+Add Helm chart repositories:
+* `helm repo add stable https://charts.helm.sh/stable`
+
+* `helm repo add bitnami https://charts.bitnami.com/bitnami`
+
+* `helm repo add rucio https://rucio.github.io/helm-charts`
+
 ## Installation
+
+_**Editor's Note**: For the installation and setup of the first end-to-end prototype I have followed the tutorial suggested by the official Rucio documentation, but for the migration on ICSC resources I will set up the Rucio Server manually._
 
 ### Rucio Server
 
 #### Local-path-provisioner TMP
 
+Being on a bare-metal k8s cluster you need to install a dynamic provisioner, otherwise you'll need to manually claim persistent volumes. We installed the local-path-provisioner storageClass following: https://github.com/rancher/local-path-provisioner?tab=readme-ov-file#installation.
+
+"In this setup, the directory /opt/local-path-provisioner will be used across all the nodes as the path for provisioning (a.k.a, store the persistent volume data). 
+
+The provisioner will be installed in local-path-storage namespace by default.
+
+* `kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml`
+
+After installation, you should see something like the following:
+
+`$ kubectl -n local-path-storage get pod
+NAME                                     READY     STATUS    RESTARTS   AGE
+local-path-provisioner-d744ccf98-xfcbk   1/1       Running   0          7m`
+
+Check and follow the provisioner log using:
+
+* `kubectl -n local-path-storage logs -f -l app=local-path-provisioner`
+
+The storageClass should be the default in your cluster, you can check it with:
+
+* `kubectl get sc`
+
+If not please set it as default following: https://kubernetes.io/docs/tasks/administer-cluster/change-default-storage-class/#changing-the-default-storageclass.
+
 #### Server Networking
 
-### S3 Storage Endpoint(s)
+### S3 Storage Endpoint
 
 #### Configuration
 

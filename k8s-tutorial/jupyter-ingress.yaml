@@ -5,8 +5,8 @@ metadata:
   name: jupyterhub-ingress
   namespace: jupyter
   annotations:
-    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
     cert-manager.io/cluster-issuer: lets-issuer
 spec:
   ingressClassName: nginx
