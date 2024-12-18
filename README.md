@@ -7,6 +7,7 @@
 - [Installation](#installation)
   - [Rucio Server](#rucio-server)
     - [Local-path-provisioner TMP](#local-path-provisioner-TMP)
+    - [Server Installation TMP](#Server-Installation-TMP)
     - [Server Networking](#Server-Networking)
   - [S3 Storage Endpoint](#S3-Storage-Endpoint)
     - [Configuration](#Configuration)
@@ -94,9 +95,23 @@ The storageClass should be the default in your cluster, you can check it with:
 
 If not please set it as default following: https://kubernetes.io/docs/tasks/administer-cluster/change-default-storage-class/#changing-the-default-storageclass.
 
+#### Server Installation TMP
+
+Follow the “Installation of Rucio + FTS + Storage” section up to the preparation of the client container from the tutorial: https://github.com/rucio/k8s-tutorial
+
+Verify that the root client is working by jumping into it:
+
+* `kubectl exec -it client -- /bin/bash`
+
+and try using some basic rucio commands like:
+
+* `rucio whoami`
+
 #### Server Networking
 
 ### S3 Storage Endpoint
+
+
 
 #### Configuration
 
