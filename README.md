@@ -10,7 +10,7 @@
     - [Server Installation TMP](#Server-Installation-TMP)
     - [Server Networking](#Server-Networking)
   - [S3 Storage Endpoint](#S3-Storage-Endpoint)
-    - [Configuration](#Configuration)
+    - [RSE Configuration](#RSE-Configuration)
 - [IDL-dedicated components](#IDL-dedicated-components)
   - [Custom policies](#Custom-policies)
   - [Custom DID-metadata plugin](#Custom-DID-metadata-plugin)
@@ -111,9 +111,91 @@ and try using some basic rucio commands like:
 
 ### S3 Storage Endpoint
 
+Follow the tutorial in [PLACEHOLDER]. Make sure that the traffic to the ports in the MinIO tutorial is allowed.
 
+#### RSE Configuration
 
-#### Configuration
+Create a RSE:
+
+* `rucio-admin rse add TEST_USERDISK`
+
+Add a protocol to the RSE:
+
+* `rucio-admin rse add-protocol --hostname <YOUR_S3_HOSTNAME>  --domain-json ‘{“lan”: {“write”: 1, “read”: 1, “delete”: 1}, “wan”: {“write”: 1, “read”: 1, “delete”: 1, “third_party_copy_read”: 1, “third_party_copy_write”: 1}}’ --impl rucio.rse.protocols.gfal.NoRename --scheme https --prefix test --port 443 TEST_USERDISK`
+
+Set a non-zero quota for the RSE:
+
+* `rucio-admin account set-limits root TEST_USERDISK 10GB`
+
+Set the following attributes:
+
+```
+rucio-admin rse set-attribute --rse TEST_USERDISK --key sign_url --value s3
+rucio-admin rse set-attribute --rse TEST_USERDISK --key skip_upload_stat --value True
+rucio-admin rse set-attribute --rse TEST_USERDISK --key verify_checksum --value False
+rucio-admin rse set-attribute --rse TEST_USERDISK --key strict_copy --value True
+rucio-admin rse set-attribute --rse TEST_USERDISK --key s3_url_style --value path
+```
+
+Create a rse-accounts.cfg (use your rse_id and s3 credentials below) file in /etc/:
+
+```
+cat >> etc/rse-accounts.cfg << EOL
+{
+	“YOUR_RSE_ID”: {
+		“access_key”: “<YOUR_ACCESS_KEY>”,
+		“secret_key”: “<YOUR_SECRET_KEY>”,
+		“signature_version”: “s3v4”
+		“region”: “us-west-2”
+	}
+}
+EOL
+```
+
+Deploy the S3 configuration to the Rucio server by creating a server-rse-accounts secret from rse-accounts.cfg:
+
+* `kubectl create secret generic server-rse-accounts --from-file /etc/rse-accounts.cfg`
+
+Add the following values in your servers helm chart (values-server.yaml):
+
+```
+secretMounts:
+   - secretName: rse-accounts
+     mountPath: /opt/rucio/etc/rse-accounts.cfg
+     subPath: rse-accounts.cfg
+config:
+   credentials:
+     gcs: "/opt/rucio/etc/rse-accounts.cfg"
+```
+
+Restart the Rucio server by deleting the pod (kubectl get pods):
+
+* `kubectl delete pod <YOUR_SERVER_POD>`
+
+Give every Rucio account, including root, the following attribute to be able to sign URLs:
+
+* `rucio-admin account add-attribute <ACCOUNT_NAME> --key sign-gcs --value true`
+
+Create a test file:
+
+* `dd if=/dev/urandom of=mydata bs=10M count=1`
+
+To upload the file, an account must have a scope. Create a scope linked to your account:
+
+* `rucio-admin scope add --account root --scope test`
+
+Upload the file in the RSE in the test scope:
+
+* `rucio upload --scope test --rse TEST_USERDISK mydata`
+
+Verify that your file is in your MinIO instance (e.g. mc ls myminio/test/test/8e/d4):
+
+* `mc ls myminio/test/path/to/uploaded/file`
+
+Download the file:
+
+* `rucio download test:mydata`
+
 
 ## IDL-dedicated components
 
