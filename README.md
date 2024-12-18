@@ -27,7 +27,7 @@ This document provides detailed instructions to reproduce the work carried out i
 
 The work described in this document is specific to the IDL project; **however**, the procedures and methodologies outlined can be easily adapted and modified to suit other contexts and metadata catalog integrations.
 
-_NOTE: The sections marked with "(tmp)" are to be intended as the work done for the first prototype developed on a bare-metal k8s cluster. After migrating the Data Lake service on ICSC resources the documentation will be updated and these sections will be deleted._
+_NOTE: The sections marked with "TMP" are to be intended as the work done for the first prototype developed on a bare-metal k8s cluster. After migrating the Data Lake service on ICSC resources the documentation will be updated and these sections will be deleted._
 
 ## Overview
 
@@ -105,11 +105,11 @@ if not, set it as default following: https://kubernetes.io/docs/tasks/administer
 
 Change the secrets and both the client's and DB's username and password.
 
-Verify that the root client is working by jumping into it:
+Verify that the root client is working by running:
 
 * `kubectl exec -it client -- /bin/bash`
 
-and try using some basic rucio commands like:
+and trying to use some basic rucio commands like:
 
 * `rucio whoami`
 
@@ -148,24 +148,24 @@ Add to the chart the following values (under spec: template: spec:):
 
 ```
 affinity:
-       nodeAffinity:
-         requiredDuringSchedulingIgnoredDuringExecution:
-      nodeSelectorTerms:
-        - matchExpressions:
-          - key: node-role.kubernetes.io/control-plane
-            operator: Exists
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+  nodeSelectorTerms:
+    - matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
 tolerations:
-      - effect: NoSchedule
-        key: node-role.kubernetes.io/control-plane
-        operator: Exists
-      - effect: NoSchedule
-        key: node-role.kubernetes.io/master
-        operator: Exists
-      volumes:
-      - name: webhook-cert
-        secret:
-          defaultMode: 420
-          secretName: ingress-nginx-admission
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+    operator: Exists
+  volumes:
+  - name: webhook-cert
+    secret:
+      defaultMode: 420
+      secretName: ingress-nginx-admission
 ```
 
 (TMP) Follow the "Via the host network" section of the bare-metal considerations guide: https://kubernetes.github.io/ingress-nginx/deploy/baremetal/.
@@ -206,7 +206,7 @@ Follow the “Troubleshooting” guide to verify that the certificate-related re
 
 ### S3 Storage Endpoint
 
-Follow the tutorial in [PLACEHOLDER]. Make sure that the traffic to the ports in the MinIO tutorial is allowed.
+Follow the tutorial in [MinIO-test](MinIO-test/). Make sure that the traffic to the ports in the MinIO tutorial is allowed.
 
 #### RSE Configuration
 
@@ -338,7 +338,7 @@ config:
     support_rucio: "https://github.com/rucio/rucio/issues/"
 ```
 
-Restart the server by deleting its pod
+Restart the server by deleting its pod.
 
 ### Custom DID-metadata plugin
 
@@ -392,7 +392,7 @@ Wait for the hub and proxy pod to enter the Running state:
 
 * `kubectl get pod -n jupyter`
 
-Following what have been done in the [PLACEHOLDER] subsections of this documentation, create an Ingress resource (jupyter-ingress.yaml) for the jupyter services:
+Following what have been done in the [Server Networking](#server-networking) subsection of this documentation, create an Ingress resource (jupyter-ingress.yaml) for the jupyter services:
 
 ```
 apiVersion: networking.k8s.io/v1
@@ -401,8 +401,8 @@ metadata:
  name: jupyterhub-ingress
  namespace: jupyter
  annotations:
-   nginx.ingress.kubernetes.io/ssl-passthrough: "true"
-   nginx.ingress.kubernetes.io/ssl-redirect: "true"
+   nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+   nginx.ingress.kubernetes.io/ssl-redirect: "false"
    cert-manager.io/cluster-issuer: lets-issuer
 spec:
  ingressClassName: nginx
@@ -433,14 +433,9 @@ The general method to modify the k8s deployment is to:
 
 - Run a helm upgrade:
 
-  ```
-  helm upgrade --cleanup-on-fail \
-    --install <your-helm-release-name> jupyterhub/jupyterhub \
-    --namespace <k8s-namespace> \
-    --create-namespace \
-    --version=<chart-version> \
-    --values jupyter-config.yaml
-  ```
+```
+helm upgrade --cleanup-on-fail --install <your-helm-release-name> jupyterhub/jupyterhub --namespace <k8s-namespace> --create-namespace --version=<chart-version> --values jupyter-config.yaml
+```
 
 - Verify that the hub and proxy pods entered the Running state.
 
@@ -503,9 +498,6 @@ hub:
    Authenticator:
      admin_users:
        - test
-       - lpacioselli
-       - dspiga
-       - dciangottini
    DummyAuthenticator:
      password: <YOUR-SHARED-PASSWORD>
    JupyterHub:
