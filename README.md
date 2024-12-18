@@ -325,17 +325,17 @@ Add the following values to the values-server.yaml:
 
 ```
 secretMounts:
- 		    - secretName: permissions
-   		      mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/permission/permissions.py
-   		      subPath: permissions.py
+  - secretName: permissions
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/permission/permissions.py
+    subPath: permissions.py
 config:
- policy:
-   permission: permissions
-   schema: generic
-   #package: policy_package
-   lfn2pfn_algorithm_default: "hash"
-   support: "https://github.com/rucio/rucio/issues/"
-   support_rucio: "https://github.com/rucio/rucio/issues/"
+  policy:
+    permission: permissions
+    schema: generic
+    #package: policy_package
+    lfn2pfn_algorithm_default: "hash"
+    support: "https://github.com/rucio/rucio/issues/"
+    support_rucio: "https://github.com/rucio/rucio/issues/"
 ```
 
 Restart the server by deleting its pod
