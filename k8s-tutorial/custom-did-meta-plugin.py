@@ -310,30 +310,30 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         elif res == True:
             return converted_dict
         
-    def get_metadata_bulk(self, dids):
-        hash_data_list = []
-        keys = []
-        for did in dids:
-            hash_data = did['name'].split('$')[0]
-            hash_data_list.append(hash_data)
-            did['name'] = did['name'].split('$')[1]
-            key = adbc__generate_record_key_from_field('{}:{}'.format(did['scope'], did['name']))
-            keys.append(key)
+    # def get_metadata_bulk(self, dids):
+    #     hash_data_list = []
+    #     keys = []
+    #     for did in dids:
+    #         hash_data = did['name'].split('$')[0]
+    #         hash_data_list.append(hash_data)
+    #         did['name'] = did['name'].split('$')[1]
+    #         key = adbc__generate_record_key_from_field('{}:{}'.format(did['scope'], did['name']))
+    #         keys.append(key)
         
-        res_read, error, records = multi_pipelined_read__wrapper(self.table_name, self.field_labels, self.ayradb_servers, keys, credentials=self.credentials)
+    #     res_read, error, records = multi_pipelined_read__wrapper(self.table_name, self.field_labels, self.ayradb_servers, keys, credentials=self.credentials)
 
-        if res_read == False:
-            print(f'Error: {error}')
-        else:
-            converted_dicts = self.convert_bytearrays(records)
-            for idx, record in enumerate(converted_dicts):
-                metadata_hash = adbc__generate_record_key_from_field(str(record))
-                try: 
-                    print(self.get_from_blockchain(data_hash=hash_data_list[idx], metadata_hash=metadata_hash)) 
-                except:
-                    # Exception management to avoid internal errors due to possible blockchain server errors
-                    print('ERROR: contacting blockchain')
-            return converted_dicts
+    #     if res_read == False:
+    #         print(f'Error: {error}')
+    #     else:
+    #         converted_dicts = self.convert_bytearrays(records)
+    #         for idx, record in enumerate(converted_dicts):
+    #             metadata_hash = adbc__generate_record_key_from_field(str(record))
+    #             try: 
+    #                 print(self.get_from_blockchain(data_hash=hash_data_list[idx], metadata_hash=metadata_hash)) 
+    #             except:
+    #                 # Exception management to avoid internal errors due to possible blockchain server errors
+    #                 print('ERROR: contacting blockchain')
+    #         return converted_dicts
 
     def delete_metadata(self, scope, name, key, *, session: "Optional[Session]" = None):
         """
