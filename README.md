@@ -6,7 +6,7 @@
 - [Getting Started](#getting-started)
 - [Installation](#installation)
   - [Rucio Server](#rucio-server)
-  - [Local-path-provisioner TMP](#localpathprovisioner-TMP)
+  - [Local-path-provisioner TMP](#local-path-provisioner-TMP)
   - [S3 Storage](#S3-Storage)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
