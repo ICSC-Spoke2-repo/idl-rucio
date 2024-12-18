@@ -1,20 +1,31 @@
 # IG-IDL project: Rucio Data Lake
 
+- [Overview](#overview)
+  - [Testbed](#testbed)
+  - [Extending Rucio to support external metadata catalogs](#extending-rucio-to-support-external–metadata-catalogs)
+- [Getting Started](#getting-started)
+- [Installation](#installation)
+  - [Rucio Server](#rucio-server)
+  - [Local-path-provisioner TMP](#localpathprovisioner-TMP)
+  - [S3 Storage](#S3-Storage)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
 This document provides detailed instructions to reproduce the work carried out in the **Interoperable Data Lake (IDL)** project Work Package 1, focusing on the development of the Data Lake service. The guide outlines the complete process for setting up a distributed data management environment, including the automated deployment and configuration of the Rucio server on a Kubernetes cluster, IDL-tailored Rucio client, the development of the custom policy package and custom DID-metadata plugin to extend Rucio's functionality, and a JupyterHub instance on the same k8s cluster with a rucio-jupyterlab extension. Work in progress for the integration of the next-generation Rucio WebUI.
 
 The work described in this document is specific to the IDL project; **however**, the procedures and methodologies outlined can be easily adapted and modified to suit other contexts and metadata catalog integrations.
 
-__The sections marked with "(bare-metal cluster --> tmp)" are to be intended as the work done for the first prototype developed on a bare-metal k8s cluster. After migrating the Data Lake service on ICSC resources the documentation will be updated and these section will probably be deleted.__ 
+_NOTE: The sections marked with "(tmp)" are to be intended as the work done for the first prototype developed on a bare-metal k8s cluster. After migrating the Data Lake service on ICSC resources the documentation will be updated and these sections will be deleted._
 
-## Interoperable Data Lake (IDL) project: Overview
+## Overview
 
 “The Project aims at creating a **Data Lake service**, supporting a seamless access to space and ground-based observations and simulated data. The project addresses the design and commissioning of an interoperable, distributed data archive, relying on **state-of-the-art open technologies**, supporting both science and industry. The service will specifically address the challenges related to the big data scenario, in terms of both **data management, storage, access**, identification and of access to computing resources”
 
-### Data Lake Testbed (WP1@IDL)
+### Testbed
 
 As part of the **Work Package 1 (WP1)** in the IDL project, this document describes the work done to develope an **end-to-end prototype for Data Management** (DM) in a distributed environment. 
 
-### Extending Rucio to support external metadata catalogs/databases
+### Extending Rucio to support external metadata catalogs
 
 A key aspect of this work involves extending **Rucio**, an open-source data management software, to support external databases/metadata catalogs. This extension is made possible by Rucio's:
 
@@ -22,13 +33,17 @@ A key aspect of this work involves extending **Rucio**, an open-source data mana
 2. **Proven Scalability**: Supports large-scale datasets with diverse metadata schemas.
 3. **Flexibility and Extensibility**: With its extensible API and plugin-based design, Rucio can be customized to meet the specific requirements of the IDL project.
 
-## Preliminaries
+## Getting Started
 
-## Rucio Server + S3 Storage installation
+## Installation
 
-### Local-path-provisioner (bare-metal cluster --> tmp)
+### Rucio Server
 
-### MinIO object storage (S3-compatible) configuration
+### Local-path-provisioner TMP
+
+### S3 Storage
+
+### S3 Storage Configuration
 
 ### Server Networking
 
