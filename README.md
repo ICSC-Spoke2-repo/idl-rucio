@@ -2,14 +2,21 @@
 
 - [Overview](#overview)
   - [Testbed](#testbed)
-  - [Extending Rucio to support external metadata catalogs](#extending-rucio-to-support-external–metadata-catalogs)
+  - [Extending Rucio to support external metadata catalogs](#extending-rucio-to-support-external-metadata-catalogs)
 - [Getting Started](#getting-started)
 - [Installation](#installation)
   - [Rucio Server](#rucio-server)
-  - [Local-path-provisioner TMP](#local-path-provisioner-TMP)
-  - [S3 Storage](#S3-Storage)
-- [License](#license)
-- [Acknowledgements](#acknowledgements)
+    - [Local-path-provisioner TMP](#local-path-provisioner-TMP)
+    - [Server Networking](#Server-Networking)
+  - [S3 Storage Endpoint(s)](#S3-Storage-Endpoint(s))
+    - [Configuration](#Configuration)
+- [IDL-dedicated components](#IDL-dedicated-components)
+  - [Custom policies](#Custom-policies)
+  - [Custom DID-metadata plugin](#Custom-DID-metadata-plugin)
+  - [Custom Rucio client](#Custom-Rucio-client)
+- [JupyterHub instance](#JupyterHub-instance)
+- [Containerized clients for testing](#Containerized-clients-for-testing)
+- [IDL-dedicated Rucio client Guide](#IDL-dedicated-Rucio-client-Guide)
 
 This document provides detailed instructions to reproduce the work carried out in the **Interoperable Data Lake (IDL)** project Work Package 1, focusing on the development of the Data Lake service. The guide outlines the complete process for setting up a distributed data management environment, including the automated deployment and configuration of the Rucio server on a Kubernetes cluster, IDL-tailored Rucio client, the development of the custom policy package and custom DID-metadata plugin to extend Rucio's functionality, and a JupyterHub instance on the same k8s cluster with a rucio-jupyterlab extension. Work in progress for the integration of the next-generation Rucio WebUI.
 
@@ -39,15 +46,13 @@ A key aspect of this work involves extending **Rucio**, an open-source data mana
 
 ### Rucio Server
 
-### Local-path-provisioner TMP
+#### Local-path-provisioner TMP
 
-### S3 Storage
+#### Server Networking
 
-### S3 Storage Configuration
+### S3 Storage Endpoint(s)
 
-### Server Networking
-
-### Containerized clients for testing
+#### Configuration
 
 ## IDL-dedicated components
 
@@ -58,6 +63,8 @@ A key aspect of this work involves extending **Rucio**, an open-source data mana
 ### Custom Rucio client
 
 ## JupyterHub instance
+
+## Containerized clients for testing
 
 ## IDL-dedicated Rucio client Guide
 
