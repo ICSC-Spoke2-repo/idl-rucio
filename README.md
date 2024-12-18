@@ -119,17 +119,17 @@ Add the following values to the values-server.yaml:
 
 ```
 ingress:
- enabled: true
- annotations:
-   nginx.ingress.kubernetes.io/ssl-passthrough: "false"
-   nginx.ingress.kubernetes.io/ssl-redirect: "false"
-   cert-manager.io/cluster-issuer: lets-issuer
- ingressClassName: nginx
- hosts:
-   - <RUCIO_SERVER_ENDPOINT>
- - hosts:
-   - <RUCIO_SERVER_ENDPOINT>
-   secretName: tls-rucio-server
+  enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    cert-manager.io/cluster-issuer: lets-issuer
+  ingressClassName: nginx
+  hosts:
+    - <RUCIO_SERVER_ENDPOINT>
+  - hosts:
+    - <RUCIO_SERVER_ENDPOINT>
+    secretName: tls-rucio-server
 ```
 
 Restart the server:
@@ -180,22 +180,22 @@ Write the following ClusterIssuer resource (cert-issuer.yaml):
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
- name: lets-issuer
- namespace: cert-manager
+  name: lets-issuer
+  namespace: cert-manager
 spec:
- acme:
-   # The ACME server URL
-   server: https://acme-v02.api.letsencrypt.org/directory
-   # Email address used for ACME registration
-   email: <YOUR_EMAIL>
-   # Name of a secret used to store the ACME account private key
-   privateKeySecretRef:
-     name: letsencrypt
-   # Enable the HTTP-01 challenge provider
-   solvers:
-   - http01:
-       ingress:
-         class: nginx
+  acme:
+    # The ACME server URL
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Email address used for ACME registration
+    email: <YOUR_EMAIL>
+    # Name of a secret used to store the ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt
+    # Enable the HTTP-01 challenge provider
+    solvers:
+    - http01:
+      ingress:
+        class: nginx
 ```
 
 Create the cert-issuer:
@@ -206,11 +206,13 @@ Follow the “Troubleshooting” guide to verify that the certificate-related re
 
 ### S3 Storage Endpoint
 
-Follow the tutorial in [MinIO-test](MinIO-test/). Make sure that the traffic to the ports in the MinIO tutorial is allowed.
+- Follow the README in [MinIO-test](MinIO-test/). 
+
+- Make sure that the traffic to the ports in the MinIO tutorial is allowed.
 
 #### RSE Configuration
 
-Create a RSE:
+Create a Rucio Storage Element (RSE):
 
 * `rucio-admin rse add TEST_USERDISK`
 
@@ -255,12 +257,12 @@ Add the following values in your servers helm chart (values-server.yaml):
 
 ```
 secretMounts:
-   - secretName: rse-accounts
-     mountPath: /opt/rucio/etc/rse-accounts.cfg
-     subPath: rse-accounts.cfg
+  - secretName: rse-accounts
+    mountPath: /opt/rucio/etc/rse-accounts.cfg
+    subPath: rse-accounts.cfg
 config:
-   credentials:
-     gcs: "/opt/rucio/etc/rse-accounts.cfg"
+  credentials:
+    gcs: "/opt/rucio/etc/rse-accounts.cfg"
 ```
 
 Restart the Rucio server by deleting the pod (kubectl get pods):
@@ -312,9 +314,7 @@ def perm_get_signed_url(issuer, kwargs, *, session: "Optional[Session]" = None):
     :returns: True if account is allowed to
     call the API call, otherwise False
     """
-    return _is_root(issuer) or
-    has_account_attribute(account=issuer,
-    key='sign-gcs', session=session)
+    return _is_root(issuer) or has_account_attribute(account=issuer, key='sign-gcs', session=session)
 ```
 
 Create the secret to automatically update the k8s cluster policies:
@@ -492,7 +492,11 @@ singleuser:
           # cull_busy: whether to consider culling kernels which are currently
           # busy running some code
           cull_busy: false # default: false
+```
+
 Add admin users:
+
+```
 hub:
  config:
    Authenticator:
@@ -518,7 +522,7 @@ singleuser
         command: ["/opt/conda/script_jhub.sh"]
 ```
 
-The chosen JupyterLab image already has conda installed. The terminal has a working rucio client inside the ‘temp-rucio-env’ environment. You need to check if the rucio.cfg file has your credentials in it in “/opt/conda/envs/temp-rucio-env/etc/rucio.cfg”:
+At the start of your JLab instance, the terminal will print a warning message and the output of a `rucio whoami` to check if the rucio.cfg file has your credentials in it. The standard rucio.cfg file should be:
 
 ```
 [client]
@@ -542,7 +546,9 @@ support = https://github.com/rucio/rucio/issues/
 support_rucio = https://github.com/rucio/rucio/issues/
 ```
 
-If you want to use the Python API Client in the jupyter notebook, select the rucio kernel and run the following in the first cell:
+You can edit it with the cred.py script to insert your account, username and password in the rucio.cfg file.
+
+If you want to use the Python API Client in the jupyter notebook, run the following in the first cell:
 
 ```
 import os
@@ -575,7 +581,7 @@ docker run -e RUCIO_CFG_CLIENT_RUCIO_HOST=https://<RUCIO_SERVER_ENDPOINT>:443 -e
 
 From the root account in your previous PC/VM, configure the accounts of the client containers by setting the quotas on the RSEs, create personal scopes, give the attribute to be able to sign URLs, etc…
 
-Jump into the client container:
+Enter into the client container:
 
 * `docker exec -it rucio-client /bin/bash`
      
