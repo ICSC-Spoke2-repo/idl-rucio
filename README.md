@@ -78,9 +78,11 @@ The provisioner will be installed in local-path-storage namespace by default.
 
 After installation, you should see something like the following:
 
-```$ kubectl -n local-path-storage get pod
+```
+$ kubectl -n local-path-storage get pod
 NAME                                     READY     STATUS    RESTARTS   AGE
-local-path-provisioner-d744ccf98-xfcbk   1/1       Running   0          7m```
+local-path-provisioner-d744ccf98-xfcbk   1/1       Running   0          7m
+```
 
 Check and follow the provisioner log using:
 
