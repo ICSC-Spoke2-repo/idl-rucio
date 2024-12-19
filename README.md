@@ -47,7 +47,7 @@ A key aspect of this work involves extending **Rucio**, an open-source data mana
 
 ## Getting Started
 
-_**NOTE**: run once export KUBECONFIG=/etc/rancher/rke2/rke2.yaml in each new terminal window, otherwise add it in the .bashrc file. Also add `export PATH="/path/to/kubectl:$PATH"` to your .bashrc file in order to use kubectl directly._
+_**NOTE**: run once `export KUBECONFIG=/path/to/kubeconfig/*.yaml` in each new terminal window, otherwise add it in the .bashrc file. Also add `export PATH="/path/to/kubectl:$PATH"` to your .bashrc file in order to use kubectl directly._
 
 Git clone repository (**TMP for the prototype**): 
 - https://github.com/rucio/k8s-tutorial.git 
