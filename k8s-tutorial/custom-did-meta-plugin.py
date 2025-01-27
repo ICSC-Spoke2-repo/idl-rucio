@@ -226,15 +226,15 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 if res_dump_table == False:
                     print(f'ERROR: dumping table: {error_dump}')
                     #raise exception.DatabaseException("Dump of the table failed")
-                    e = f'ERROR: dumping table: {error_dump}'
-                    return generate_http_error_flask(406, e) 
+                    #e = f'ERROR: dumping table: {error_dump}'
+                    #return generate_http_error_flask(406, e) 
                 elif res_dump_table == True:
                    print('Successfully dumped the table!')
 
                 # Check result of writing record
                 if res == False:
                     print(f'ERROR: writing a record: {error}')
-                    raise exception.DatabaseException("Failed to write the metadata")
+                    #raise exception.DatabaseException("Failed to write the metadata")
                 elif res == True:
                     print('Successfully wrote the metadata!')
 
@@ -244,7 +244,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 except:
                     # Exception management to avoid internal errors due to possible blockchain server errors
                     print('ERROR: contacting blockchain')
-                    raise exception.DatabaseException("Failed to contact the blockchain")
+                    #raise exception.DatabaseException("Failed to contact the blockchain")
                 
                 ###########################
                 
