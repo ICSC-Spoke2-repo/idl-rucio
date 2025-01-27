@@ -14,12 +14,12 @@ singleuser:
   defaultUrl: "/lab"
   storage:
     extraVolumes:
-      - name: rucio4leo-config
+      - name: idl-config
         configMap:
-          name: rucio4leo-config
+          name: idl-config
     extraVolumeMounts:
-      - name: rucio4leo-config
-        mountPath: /home/jovyan/rucio4leo_configs/
+      - name: idl-config
+        mountPath: /home/jovyan/idl_configs/
   extraEnv:
     RUCIO_WILDCARD_ENABLED: "true"
     JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
@@ -29,7 +29,7 @@ singleuser:
     # Inspect the Dockerfile at:
     # https://github.com/jupyter/docker-stacks/tree/HEAD/datascience-notebook/Dockerfile
     name: lucapacioselli/jupyter4rucio #jupyter/tensorflow-notebook 
-    tag: v1.0.6 #ubuntu-22.04 
+    tag: test-rt-v0.0.3 #ubuntu-22.04 
   # `cmd: null` allows the custom CMD of the Jupyter docker-stacks to be used
   # which performs further customization on startup.
   cmd: null

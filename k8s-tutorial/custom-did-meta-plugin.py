@@ -58,6 +58,8 @@ import psycopg2
 import psycopg2.extras
 
 from rucio.common import config, exception
+from sqlalchemy.exc import CompileError, InvalidRequestError, NoResultFound
+from rucio.web.rest.flaskapi.v1.common import ErrorHandlingMethodView, check_accept_header_wrapper_flask, generate_http_error_flask, json_list, json_parameters, json_parse, param_get, parse_scope_name, response_headers, try_stream
 from rucio.common.types import InternalScope
 from rucio.core.did_meta_plugins.did_meta_plugin_interface import DidMetaPlugin
 from rucio.core.did_meta_plugins.filter_engine import FilterEngine
@@ -165,7 +167,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             return data  # Return as is if it's not a bytearray, list, or dict 
 
     def set_metadata(self, scope: "InternalScope", name: str, key: str, value: str, 
-                     recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
+                     recursive: bool = False, *, session: "Optional[Session]" = None): # -> None:
         """
         Add metadata to data identifier.
 
@@ -202,11 +204,16 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 print(type(key))
 
                 # Write the record
-                error = None
+                #error = None
                 try:
                     res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.fields)
-                except:
+                except CompileError as e:
                     print(f'{error}')
+                    raise exception.InvalidMetadata(e)
+                except InvalidRequestError:
+                    raise exception.InvalidMetadata("Some of the keys are not accepted")
+        
+                    
                 #print(res)
 
                 # Dump of the metadata table to the internal warehouse (at the moment it can create some issues for the queries)
@@ -217,13 +224,17 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
                 # Check result of dumping table
                 if res_dump_table == False:
-                   print(f'ERROR: dumping table: {error_dump}')
+                    print(f'ERROR: dumping table: {error_dump}')
+                    #raise exception.DatabaseException("Dump of the table failed")
+                    e = f'ERROR: dumping table: {error_dump}'
+                    return generate_http_error_flask(406, e) 
                 elif res_dump_table == True:
                    print('Successfully dumped the table!')
 
                 # Check result of writing record
                 if res == False:
                     print(f'ERROR: writing a record: {error}')
+                    raise exception.DatabaseException("Failed to write the metadata")
                 elif res == True:
                     print('Successfully wrote the metadata!')
 
@@ -233,6 +244,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 except:
                     # Exception management to avoid internal errors due to possible blockchain server errors
                     print('ERROR: contacting blockchain')
+                    raise exception.DatabaseException("Failed to contact the blockchain")
                 
                 ###########################
                 

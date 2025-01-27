@@ -38,6 +38,7 @@ from rucio.common import exception
 from rucio.common.exception import (
     AccessDenied,
     CannotAuthenticate,
+    DatabaseException,
     DataIdentifierAlreadyExists,
     DataIdentifierNotFound,
     DIDFilterSyntaxError,
@@ -653,6 +654,25 @@ def customUpload(args): #scope, file, meta, rse, bulk
             # Set the metadata for the uploaded file
             client.set_metadata(scope=did_scope, name=did_name, key='JSON', value=json_string)
 
+            # Temporary workaround for the lack of error return from did-metadata plugin
+            try:
+                did_name = "prova:" + did_name
+                meta = client.get_metadata(scope=did_scope, name=did_name, plugin="IDL")
+                # Check for empty values
+                num_keys = 0
+                empty_counter = 0
+                for k, v in meta.items():
+                    if k == "LINK":
+                        continue
+                    else:
+                        if v == "":
+                            empty_counter += 1
+                        num_keys += 1
+                if num_keys == empty_counter:
+                    raise DatabaseException("Wrote an empty metadata record")
+            except:
+                raise DatabaseException("Failed to write the metadata")
+
         except Exception as e:
             print(f"Error: {e}")
     
@@ -773,11 +793,11 @@ def customGetMeta(args): #scope, name, plugin
                 table = [(k + ':', str(v)) for (k, v) in sorted(meta.items())]
                 print(tabulate(table, tablefmt='plain', disable_numparse=True))
             return SUCCESS
-            meta = client.get_metadata(plugin = "DID_COLUMN", scope=args.scope, name=args.name)
-            # Print the resulting dict in the same format as the rucio get-metadata
-            max_key_length = max(len(key) for key in meta.keys())
-            for keys, values in meta.items():
-                print(f"{keys}:".ljust(max_key_length + 1) + f"  {values}")
+            # meta = client.get_metadata(plugin = "DID_COLUMN", scope=args.scope, name=args.name)
+            # # Print the resulting dict in the same format as the rucio get-metadata
+            # max_key_length = max(len(key) for key in meta.keys())
+            # for keys, values in meta.items():
+            #     print(f"{keys}:".ljust(max_key_length + 1) + f"  {values}")
         except Exception as e:
             print(f"Error: {e}")
 
