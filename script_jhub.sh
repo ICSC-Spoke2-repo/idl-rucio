@@ -10,7 +10,7 @@ fi
 
 #Move the config files in the correct location
 if [ ! -f "/opt/conda/etc/rucio.cfg" ]; then
-    cp /home/jovyan/rucio4leo_configs/rucio.cfg /opt/conda/etc/rucio.cfg
+    cp /home/jovyan/idl_configs/rucio.cfg /opt/conda/etc/rucio.cfg
 fi
 
 #if ! grep -q 'export IPYTHONDIR=/home/jovyan/ipython_kernel_config.py' ~/.bashrc; then
@@ -21,12 +21,12 @@ fi
 #    echo "export JUPYTER_CONFIG_DIR=/home/jovyan/jupyter_notebook_config.json" >> ~/.bashrc
 #fi
 
-chmod +r /home/jovyan/rucio4leo_configs/jupyter_notebook_config.json
+chmod +r /home/jovyan/idl_configs/jupyter_notebook_config.json
 chown -R jovyan:users /home/jovyan/.jupyter
-chown -R jovyan:users /home/jovyan/rucio4leo_configs/
+chown -R jovyan:users /home/jovyan/idl_configs/
 
 if [ ! -f "/home/jovyan/.jupyter/jupyter_notebook_config.json" ]; then
-    cp /home/jovyan/rucio4leo_configs/jupyter_notebook_config.json /home/jovyan/.jupyter/jupyter_notebook_config.json
+    cp /home/jovyan/idl_configs/jupyter_notebook_config.json /home/jovyan/.jupyter/jupyter_notebook_config.json
 fi
 
 #Old string and replacement string
