@@ -167,7 +167,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             return data  # Return as is if it's not a bytearray, list, or dict 
 
     def set_metadata(self, scope: "InternalScope", name: str, key: str, value: str, 
-                     recursive: bool = False, *, session: "Optional[Session]" = None): # -> None:
+                     recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
         """
         Add metadata to data identifier.
 
@@ -207,11 +207,11 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 #error = None
                 try:
                     res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.fields)
-                except CompileError as e:
+                    if res == False:
+                        raise exception.DatabaseException("Failed to write the metadata")
+                except exception.InvalidMetadata as e:
                     print(f'{error}')
                     raise exception.InvalidMetadata(e)
-                except InvalidRequestError:
-                    raise exception.InvalidMetadata("Some of the keys are not accepted")
         
                     
                 #print(res)
@@ -225,9 +225,9 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 # Check result of dumping table
                 if res_dump_table == False:
                     print(f'ERROR: dumping table: {error_dump}')
-                    #raise exception.DatabaseException("Dump of the table failed")
-                    e = f'ERROR: dumping table: {error_dump}'
-                    return generate_http_error_flask(406, e) 
+                    raise exception.DatabaseException("Dump of the table failed")
+                    #e = f'ERROR: dumping table: {error_dump}'
+                    #return generate_http_error_flask(406, e) 
                 elif res_dump_table == True:
                    print('Successfully dumped the table!')
 
@@ -244,7 +244,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 except:
                     # Exception management to avoid internal errors due to possible blockchain server errors
                     print('ERROR: contacting blockchain')
-                    raise exception.DatabaseException("Failed to contact the blockchain")
+                    #raise exception.DatabaseException("Failed to contact the blockchain")
                 
                 ###########################
                 
