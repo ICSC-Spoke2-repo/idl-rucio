@@ -700,11 +700,13 @@ def perm_add_replicas(issuer: "InternalAccount", kwargs: dict[str, Any], *, sess
     :param session: The DB session to use
     :returns: True if account is allowed, otherwise False
     """
-    return str(kwargs.get('rse', '')).endswith('SCRATCHDISK')\
-        or str(kwargs.get('rse', '')).endswith('USERDISK')\
-        or str(kwargs.get('rse', '')).endswith('MOCK')\
-        or str(kwargs.get('rse', '')).endswith('LOCALGROUPDISK')\
-        or _is_root(issuer) or has_account_attribute(account=issuer, key='admin', session=session)
+    return _is_root(issuer) or has_account_attribute(account=issuer, key='admin', session=session) or rucio.core.scope.is_scope_owner(scope=kwargs.get('scope'), account=issuer, session=session)
+
+    # return str(kwargs.get('rse', '')).endswith('SCRATCHDISK')\
+    #     or str(kwargs.get('rse', '')).endswith('USERDISK')\
+    #     or str(kwargs.get('rse', '')).endswith('MOCK')\
+    #     or str(kwargs.get('rse', '')).endswith('LOCALGROUPDISK')\
+    #     or _is_root(issuer) or has_account_attribute(account=issuer, key='admin', session=session)
 
 
 def perm_skip_availability_check(issuer: "InternalAccount", kwargs: dict[str, Any], *, session: "Optional[Session]" = None) -> bool:

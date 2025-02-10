@@ -654,28 +654,6 @@ def customUpload(args): #scope, file, meta, rse, bulk
             # Set the metadata for the uploaded file
             client.set_metadata(scope=did_scope, name=did_name, key='JSON', value=json_string)
 
-            # Temporary workaround for the lack of error return from did-metadata plugin
-            did_name = "prova:" + did_name
-            try:
-                meta = client.get_metadata(scope=did_scope, name=did_name, plugin="IDL")
-            except:
-                raise DatabaseException("Failed to write the metadata")
-            try:
-                # Check for empty values
-                num_keys = 0
-                empty_counter = 0
-                for k, v in meta.items():
-                    if k == "LINK":
-                        continue
-                    else:
-                        if v == "":
-                            empty_counter += 1
-                        num_keys += 1
-                if num_keys == empty_counter:
-                    raise ValueError
-            except:
-                raise DatabaseException("Wrote an empty metadata record")
-
         except Exception as e:
             print(f"Error: {e}")
     

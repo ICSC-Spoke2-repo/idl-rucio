@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This code has been modified for the ICSC Spoke2 IDL project 
+
 ###############################################################################################
 # For the following didmeta plugin to work correctly, it must be used with the IDL API Client #
 ###############################################################################################
@@ -173,9 +175,8 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
         :param scope: The scope name.
         :param name: The data identifier name.
-        :param key: the key.
-        :param value: the value.
-        :param did: The data identifier info.
+        :param key: the key is fixed to JSON.
+        :param value: the value is the output of the .json metadata file to write.
         :param recursive: Option to propagate the metadata change to content.
         :param session: The database session in use.
         """
@@ -183,75 +184,55 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             try:
                 # Use this Python dict to add the DID, which is unique in Rucio, in the "LINK" field or, in general,to edit the fields if needed 
                 dict = json.loads(value) 
-
-                print(value)
-                print(type(value))
                 
                 self.fields = {keys: values for keys, values in dict.items() if keys != 'sha256'}
 
-                # Debug
-                print(dict)
-                print(type(dict))
-                print('################################')
-                print(self.fields)
-                print(type(self.fields))
-                print('################################')
-
                 # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
-                key = adbc__generate_record_key_from_field(self.fields['LINK'])
+                try:
+                    key = adbc__generate_record_key_from_field(self.fields['LINK'])
+                except Exception as e:
+                    raise Exception(f'Failed to generate key for AyraDB: {str(e)}')
 
-                print(key)
-                print(type(key))
-
-                # Write the record
-                #error = None
+                # Write the record on AyraDB
                 try:
                     res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.fields)
-                    if res == False:
-                        raise exception.DatabaseException("Failed to write the metadata")
-                except exception.InvalidMetadata as e:
-                    print(f'{error}')
-                    raise exception.InvalidMetadata(e)
-        
                     
-                #print(res)
+                    if res == False:
+                        raise Exception(f"Failed to write the metadata record: {error}")
+                    elif res == True:
+                        print('Successfully wrote the metadata record!')
+                except Exception as e:
+                    print(f'Error writing metadata record: {str(e)}')  # Display in the server logs the raised error message
+                    raise  # Re-raise the original exception
+        
+                # Dump the metadata table to the internal warehouse
+                try:
+                    res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
 
-                # Dump of the metadata table to the internal warehouse (at the moment it can create some issues for the queries)
-                res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
-                #res_dump_table, error_dump = adbc_1liner__dump_table_ild_metadata_to_warehouse(self.ayradb_servers, self.credentials)
-
-                print(res_dump_table)
-
-                # Check result of dumping table
-                if res_dump_table == False:
-                    print(f'ERROR: dumping table: {error_dump}')
-                    raise exception.DatabaseException("Dump of the table failed")
-                    #e = f'ERROR: dumping table: {error_dump}'
-                    #return generate_http_error_flask(406, e) 
-                elif res_dump_table == True:
-                   print('Successfully dumped the table!')
-
-                # Check result of writing record
-                if res == False:
-                    print(f'ERROR: writing a record: {error}')
-                    raise exception.DatabaseException("Failed to write the metadata")
-                elif res == True:
-                    print('Successfully wrote the metadata!')
+                    if res_dump_table == False:
+                        raise Exception(f"Failed to dump the table: {error_dump}")
+                    elif res_dump_table == True:
+                        print('Successfully dumped the table!')
+                except Exception as e:
+                    print(f'Error dumping the table: {str(e)}') # Display in the server logs the raised error message
+                    raise  # Re-raise the original exception
 
                 ######## blockchain ###########
                 try:
                     self.set_blockchain(value)
-                except:
+                except Exception as e:
+                    # TO-DO: implement the raise error when in production/on ICSC resources
                     # Exception management to avoid internal errors due to possible blockchain server errors
-                    print('ERROR: contacting blockchain')
+                    print(f'Error contacting blockchain. ERROR: {str(e)}')
                     #raise exception.DatabaseException("Failed to contact the blockchain")
                 
                 ###########################
                 
             except Exception as e:
-                print(f"ERROR: {e}")
+                raise
         else:
-            print("Key must be 'JSON'")
+            print('Key must be "JSON"')
+            #raise Exception("Key must be 'JSON'")
 
     def get_metadata(self, scope, name, *, session: "Optional[Session]" = None):
         """
@@ -266,86 +247,57 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         hash_data = name.split(':')[0]
         clean_name = name.split(':')[1]
 
-        #print(self.ayradb_servers)
-        #print(self.credentials)
-        
-        # Constant SQL query to retrieve the metadata of a DID
-        # const_sql_query = f"SELECT * FROM ayradb.metadata WHERE LINK='{scope.internal}:{clean_name}';"
+        # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
+        try:
+            key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, clean_name))
+        except Exception as e:
+            raise Exception(f'Failed to generate key for AyraDB: {str(e)}')
 
-        # Debug
-        # print(const_sql_query)
-
-        key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, clean_name))
-
-        # res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, const_sql_query, warehouse_query=True)          
-        res, error, record = adbc_1liner__read_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.field_labels)
-
-        # Debug
-        print(record)
-
-        # Convert the Python dict from bytearrays to strings
-        converted_dict = self.convert_bytearrays(record)
-
-        # Debug
-        print('###############################')
-        print(str(converted_dict))
-        print('###############################')
-
-        ######## blockchain ###########
-        # Computation of metadata_hash for the get_from_blockchain method  
-        metahash_dict = {keys: values for keys, values in converted_dict.items()}
-
-        print(metahash_dict)
-
-        # string = metahash_dict["EPOCH"]
-        # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
-        # The next two lines are needed because during set_metadata the metadata_hash for the blockchain has been computed with "2024-09-14T23:20:02.120928" format, but when it is returned by the DB cluster it has a space instead of the 'T'
-        # If you don't do this replacement, the metadata_hash computed in line 292 will be different and the validate_data will return Fals
-        # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].replace(' ', 'T')
-        # metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
-
-        metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
-
-        # print(metahash_dict)
-
-        try: 
-            print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash)) 
-        except:
-            # Exception management to avoid internal errors due to possible blockchain server errors
-            print('ERROR: contacting blockchain')
-        
-        ###########################
+        # Get the record from AyraDB
+        try:
+            res, error, record = adbc_1liner__read_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.field_labels)
             
-        # Check result of getting the metadata for a DID
-        if res == False:
-            print(f'ERROR: retrieving the metadata: {error}')
-        elif res == True:
-            return converted_dict
-        
-    # def get_metadata_bulk(self, dids):
-    #     hash_data_list = []
-    #     keys = []
-    #     for did in dids:
-    #         hash_data = did['name'].split('$')[0]
-    #         hash_data_list.append(hash_data)
-    #         did['name'] = did['name'].split('$')[1]
-    #         key = adbc__generate_record_key_from_field('{}:{}'.format(did['scope'], did['name']))
-    #         keys.append(key)
-        
-    #     res_read, error, records = multi_pipelined_read__wrapper(self.table_name, self.field_labels, self.ayradb_servers, keys, credentials=self.credentials)
+            if res == False:
+                raise Exception(f"Failed to get the records: {error}")
+            elif res == True:
+                print('Successfully read the metadata records!')
 
-    #     if res_read == False:
-    #         print(f'Error: {error}')
-    #     else:
-    #         converted_dicts = self.convert_bytearrays(records)
-    #         for idx, record in enumerate(converted_dicts):
-    #             metadata_hash = adbc__generate_record_key_from_field(str(record))
-    #             try: 
-    #                 print(self.get_from_blockchain(data_hash=hash_data_list[idx], metadata_hash=metadata_hash)) 
-    #             except:
-    #                 # Exception management to avoid internal errors due to possible blockchain server errors
-    #                 print('ERROR: contacting blockchain')
-    #         return converted_dicts
+                # Convert the Python dict from bytearrays to strings
+                try:
+                    converted_dict = self.convert_bytearrays(record)
+                except Exception as e:
+                    raise Exception(f'Error converting the records from bytearrays: {str(e)}')
+                
+
+                ######## blockchain ###########
+                try:
+                    # Computation of metadata_hash for the get_from_blockchain method  
+                    metahash_dict = {keys: values for keys, values in converted_dict.items()}
+
+                    # Values wrangling 
+                    # string = metahash_dict["EPOCH"]
+                    # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
+                    # The next two lines are needed because during set_metadata the metadata_hash for the blockchain has been computed with "2024-09-14T23:20:02.120928" format, but when it is returned by the DB cluster it has a space instead of the 'T'
+                    # If you don't do this replacement, the metadata_hash computed in line 292 will be different and the validate_data will return Fals
+                    # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].replace(' ', 'T')
+                    # metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
+
+                    metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
+
+                    print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash)) 
+                except Exception as e:
+                    # TO-DO: implement the raise error when in production/on ICSC resources
+                    # Exception management to avoid internal errors due to possible blockchain server errors
+                    print(f'Error contacting blockchain. ERROR: {str(e)}')
+                    #raise exception.DatabaseException("Failed to contact the blockchain")
+                ###########################
+
+                # Return the converted metadata record
+                return converted_dict
+            
+        except Exception as e:
+            print(f'Error getting records: {str(e)}')  # Display in the server logs the raised error message
+            raise  # Re-raise the original exception
 
     def delete_metadata(self, scope, name, key, *, session: "Optional[Session]" = None):
         """
