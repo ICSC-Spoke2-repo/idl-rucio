@@ -170,6 +170,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
     def set_metadata(self, scope: "InternalScope", name: str, key: str, value: str, 
                      recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
+                     recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
         """
         Add metadata to data identifier.
 
