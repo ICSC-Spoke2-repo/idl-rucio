@@ -4,7 +4,7 @@ traceReplicaCount: 0
 
 image:
   repository: lucapacioselli/rucio-server #rucio/rucio-server
-  tag: v1.0.3 #v1.0.2 #release-34.5.0
+  tag: v1.0.3 #release-34.5.0
 
 #configMap:
 #  name: policy-package
@@ -18,15 +18,15 @@ secretMounts:
   - secretName: plugin
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/did_meta_plugins/custom-did-meta-plugin.py
     subPath: custom-did-meta-plugin.py
-  - secretName: inaf-plugin
-    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/did_meta_plugins/inaf-did-meta-plugin.py
-    subPath: inaf-did-meta-plugin.py
+  # - secretName: inaf-plugin
+  #   mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/did_meta_plugins/inaf-did-meta-plugin.py
+  #   subPath: inaf-did-meta-plugin.py
   - secretName: ayradb-cluster
     mountPath: /tmp/AyraDB_cluster_credentials.cfg
     subPath: AyraDB_cluster_credentials.cfg
-  - secretName: inaf-db
-    mountPath: /tmp/INAF_postgres_credentials.cfg
-    subPath: INAF_postgres_credentials.cfg
+  # - secretName: inaf-db
+  #   mountPath: /tmp/INAF_postgres_credentials.cfg
+  #   subPath: INAF_postgres_credentials.cfg
   - secretName: permissions
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/permission/permissions.py
     subPath: permissions.py
