@@ -168,9 +168,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         else:
             return data  # Return as is if it's not a bytearray, list, or dict 
 
-    def set_metadata(self, scope: "InternalScope", name: str, key: str, value: str, 
-                     recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
-                     recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
+    def set_metadata(self, scope: "InternalScope", name: str, key: str, value: str, recursive: bool = False, *, session: "Optional[Session]" = None) -> None:
         """
         Add metadata to data identifier.
 
@@ -270,31 +268,37 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                     raise Exception(f'Error converting the records from bytearrays: {str(e)}')
                 
 
-                ######## blockchain ###########
-                try:
-                    # Computation of metadata_hash for the get_from_blockchain method  
-                    metahash_dict = {keys: values for keys, values in converted_dict.items()}
+                if hash_data == "get-metadata_handling":
+                    # Return the converted metadata record
+                    return converted_dict
+                else:
+                    ######## blockchain ###########
+                    try:
+                        # Computation of metadata_hash for the get_from_blockchain method  
+                        metahash_dict = {keys: values for keys, values in converted_dict.items()}
 
-                    # Values wrangling 
-                    # string = metahash_dict["EPOCH"]
-                    # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
-                    # The next two lines are needed because during set_metadata the metadata_hash for the blockchain has been computed with "2024-09-14T23:20:02.120928" format, but when it is returned by the DB cluster it has a space instead of the 'T'
-                    # If you don't do this replacement, the metadata_hash computed in line 292 will be different and the validate_data will return Fals
-                    # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].replace(' ', 'T')
-                    # metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
+                        # Values wrangling 
+                        # string = metahash_dict["EPOCH"]
+                        # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
+                        # The next two lines are needed because during set_metadata the metadata_hash for the blockchain has been computed with "2024-09-14T23:20:02.120928" format, but when it is returned by the DB cluster it has a space instead of the 'T'
+                        # If you don't do this replacement, the metadata_hash computed in line 292 will be different and the validate_data will return Fals
+                        # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].replace(' ', 'T')
+                        # metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
 
-                    metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
+                        metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
+                        print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash))
 
-                    print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash)) 
-                except Exception as e:
-                    # TO-DO: implement the raise error when in production/on ICSC resources
-                    # Exception management to avoid internal errors due to possible blockchain server errors
-                    print(f'Error contacting blockchain. ERROR: {str(e)}')
-                    #raise exception.DatabaseException("Failed to contact the blockchain")
-                ###########################
-
-                # Return the converted metadata record
-                return converted_dict
+                        if self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash) == "The metadata hash is not the same":
+                            raise Exception("The hashes are different from the ones in the blockchain!")
+                        else:
+                            # Return the validated metadata record
+                            return converted_dict
+                    except Exception as e:
+                        # TO-DO: implement the raise error when in production/on ICSC resources
+                        # Exception management to avoid internal errors due to possible blockchain server errors
+                        print(f'Error contacting blockchain. ERROR: {str(e)}')
+                        raise #exception.DatabaseException("Failed to contact the blockchain")
+                    ###########################
             
         except Exception as e:
             print(f'Error getting records: {str(e)}')  # Display in the server logs the raised error message
