@@ -700,7 +700,23 @@ def perm_add_replicas(issuer: "InternalAccount", kwargs: dict[str, Any], *, sess
     :param session: The DB session to use
     :returns: True if account is allowed, otherwise False
     """
-    return _is_root(issuer) or has_account_attribute(account=issuer, key='admin', session=session) or rucio.core.scope.is_scope_owner(scope=kwargs.get('scope'), account=issuer, session=session)
+    # add_replicas in "/rucio/lib/rucio/gateway/replica.py" ver35.6.1 ("/rucio/lib/rucio/api/replica.py" in ver34.5.0) doesn't have 'scope' key in the kwargs, but 'rse' and 'rse_id'.
+    # A "'files': files" must be added in the kwargs. 'files' is the list of DIDs to upload 
+    # :param files: The list of files. This is a list of DIDs like :[{'scope': <scope1>, 'name': <name1>}, {'scope': <scope2>, 'name': <name2>}, ...]
+    # TO-DO: Try "is_scope_owner" on those scopes with a for loop on the kwargs['files'] after editing and making the edited replica.py automated
+    if _is_root(issuer) or has_account_attribute(account=issuer, key='admin', session=session):
+        return True
+    
+    # print(kwargs)
+    # output] {'rse': 'TEST_USERDISK', 'rse_id': '69196c9d632c439f9e69f04dbd154060'}
+
+    for f in kwargs['files']:
+        if rucio.core.scope.is_scope_owner(scope=f['scope'], account=issuer, session=session) != True:
+            return False
+        
+    return False
+
+    # return _is_root(issuer) or has_account_attribute(account=issuer, key='admin', session=session) or rucio.core.scope.is_scope_owner(scope=kwargs.get('scope'), account=issuer, session=session)
 
     # return str(kwargs.get('rse', '')).endswith('SCRATCHDISK')\
     #     or str(kwargs.get('rse', '')).endswith('USERDISK')\
