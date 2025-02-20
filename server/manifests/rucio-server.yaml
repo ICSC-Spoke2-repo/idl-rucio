@@ -1,0 +1,64 @@
+replicaCount: 1
+authReplicaCount: 0
+traceReplicaCount: 0
+
+image:
+  repository: lucapacioselli/rucio-server
+  tag: v1.0.4
+
+secretMounts:
+  - secretName: plugin
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/did_meta_plugins/custom-did-meta-plugin.py
+    subPath: custom-did-meta-plugin.py
+  - secretName: ayradb-cluster
+    mountPath: /tmp/metaDB_credentials_template.cfg # change with the real one
+    subPath: metaDB_credentials_template.cfg # change with the real one
+  - secretName: permissions
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/permission/permissions.py
+    subPath: permissions.py
+  - secretName: rse-accounts
+    mountPath: /opt/rucio/etc/rse-accounts-template.cfg # change with the real one
+    subPath: rse-accounts-template.cfg # change with the real one
+
+config:
+  metadata:
+    plugins: rucio.core.did_meta_plugins.custom-did-meta-plugin.CustomDidMetaPlugin
+  policy:
+    permission: permissions
+    schema: generic
+    lfn2pfn_algorithm_default: "hash"
+    support: "https://github.com/rucio/rucio/issues/"
+    support_rucio: "https://github.com/rucio/rucio/issues/"
+  credentials:
+    gcs: "/opt/rucio/etc/rse-accounts-template.cfg" # change with the real one
+  database:
+    default: "postgresql://rucio:<DB_PASSWORD>@<HELM_RELEASE_DB_NAME>-postgresql/rucio-db"
+    schema: "test"
+
+httpd_config:
+  encoded_slashes: "True"
+
+ingress:
+  enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/frontend-entry-points: http, https
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod-issuer # this is the case of the ICSC/INFN Cloud Dashboard, otherwise you need to follow the Vanilla integration
+  ingressClassName: nginx
+  hosts:
+    - <SERVER_HOSTNAME>
+  tls:
+    - secretName: rucio-idl-server-tls # change if needed
+
+authIngress:
+  enabled: false
+  annotations: 
+    kubernetes.io/ingress-class: nginx
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: lets-issuer
+  path: /
+  hosts: 
+    - 
+  tls: 
+    - secretName: tls-rucio-auth-server

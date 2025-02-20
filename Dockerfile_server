@@ -1,8 +1,0 @@
-FROM rucio/rucio-server:release-34.5.0
-
-#COPY ./adbc /usr/local/lib/python3.9/site-packages/adbc
-#COPY ./adbc-1.0.1.dist-info /usr/local/lib/python3.9/site-packages/adbc-1.0.1.dist-info
-COPY ./adbc-1.0.1-py3-none-any.whl /usr/local/lib/python3.9/site-packages/adbc-1.0.1-py3-none-any.whl
-
-RUN pip install /usr/local/lib/python3.9/site-packages/adbc-1.0.1-py3-none-any.whl
-RUN pip install psutil

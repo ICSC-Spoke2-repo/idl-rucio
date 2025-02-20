@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-root
+  labels:
+    app: client-root
+  namespace: rucio-idl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client-root
+  template:
+    metadata:
+      name: client-root
+      labels:
+        app: client-root
+    spec:
+      containers:
+      - name: rucio-client-root
+        image: lucapacioselli/rucio-client-test:test-v1.1.6
+        command: ["/bin/bash"]
+        args: ["-c", "mkdir -p /opt/rucio/etc; echo ready; while true; do sleep 60; done"]
+        env:
+        - name: RUCIO_CFG_CLIENT_RUCIO_HOST
+          value: http://server-rucio-server # intended to be deployed on the same k8s cluster as the server
+        - name: RUCIO_CFG_CLIENT_AUTH_HOST
+          value: http://server-rucio-server
+        - name: RUCIO_CFG_CLIENT_AUTH_TYPE
+          value: userpass
+        - name: RUCIO_CFG_CLIENT_USERNAME
+          value: <ROOT_USERNAME>
+        - name: RUCIO_CFG_CLIENT_PASSWORD
+          value: <ROOT_PASSWORD>
+        - name: RUCIO_CFG_CLIENT_ACCOUNT
+          value: root

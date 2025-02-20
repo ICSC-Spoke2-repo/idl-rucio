@@ -1,0 +1,101 @@
+# This file can update the JupyterHub Helm chart's default configuration values.
+#
+# For reference see the configuration reference and default values, but make
+# sure to refer to the Helm chart version of interest to you!
+#
+# Introduction to YAML:     https://www.youtube.com/watch?v=cdLNKUoMc6c
+# Chart config reference:   https://zero-to-jupyterhub.readthedocs.io/en/stable/resources/reference.html
+# Chart default values:     https://github.com/jupyterhub/zero-to-jupyterhub-k8s/blob/HEAD/jupyterhub/values.yaml
+# Available chart versions: https://hub.jupyter.org/helm-chart/
+#
+
+singleuser:
+  # use jupyterlab as the default interface 
+  defaultUrl: "/lab"
+  storage:
+    extraVolumes:
+      - name: idl_config # kubectl create configmap idl_config --from-file=configs/ --namespace=jupyter
+        configMap:
+          name: idl_config
+    extraVolumeMounts:
+      - name: idl_config
+        mountPath: /home/jovyan/idl_configs/
+  extraEnv:
+    RUCIO_WILDCARD_ENABLED: "true"
+    JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
+  image:
+    # You should replace the "latest" tag with a fixed version from:
+    # https://hub.docker.com/r/jupyter/datascience-notebook/tags/
+    # Inspect the Dockerfile at:
+    # https://github.com/jupyter/docker-stacks/tree/HEAD/datascience-notebook/Dockerfile
+    name: lucapacioselli/jupyter4rucio #jupyter/tensorflow-notebook 
+    tag: test-rt-v0.0.3 #ubuntu-22.04 
+  # `cmd: null` allows the custom CMD of the Jupyter docker-stacks to be used
+  # which performs further customization on startup.
+  cmd: null
+  lifecycleHooks: 
+    postStart:
+      exec:
+        command: ["/opt/conda/script_jhub.sh"]
+  ### Storage is handled by the k8s cluster's local-path-provisioner ###
+  #extraFiles:
+    # jupyter_notebook_config reference: https://jupyter-notebook.readthedocs.io/en/stable/config.html
+  #  jupyter_notebook_config.json:
+  #    mountPath: /etc/jupyter/jupyter_notebook_config.json
+      # data is a YAML structure here but will be rendered to JSON file as our
+      # file extension is ".json".
+  #    data:
+  #      MappingKernelManager:
+          # cull_idle_timeout: timeout (in seconds) after which an idle kernel is
+          # considered ready to be culled
+  #        cull_idle_timeout: 1200 # default: 0
+
+          # cull_interval: the interval (in seconds) on which to check for idle
+          # kernels exceeding the cull timeout value
+  #       cull_interval: 120 # default: 300
+
+          # cull_connected: whether to consider culling kernels which have one
+          # or more connections
+  #        cull_connected: true # default: false
+
+          # cull_busy: whether to consider culling kernels which are currently
+          # busy running some code
+  #        cull_busy: false # default: false
+
+#ingress:
+#  enabled: true
+#  annotations:
+#    #kubernetes.io/ingress-class: nginx
+#    #nginx.ingress.kubernetes.io/frontend-entry-points: http, https
+#    #nginx.ingress.kubernetes.io/ssl-redirect: "false"
+#    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+#    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+#    cert-manager.io/cluster-issuer: lets-issuer
+#  ingressClassName: nginx
+#  hosts:
+#    - jupyterhub.131.154.98.24.myip.cloud.infn.it
+#  tls: 
+#  - hosts:
+#    - jupyterhub.131.154.98.24.myip.cloud.infn.it
+#    secretName: tls-jupyterhub
+
+#proxy:
+#  https:
+#    enabled: true
+#    hosts:
+#      - jupyterhub.131.154.98.24.myip.cloud.infn.it
+#    letsencrypt:
+#      contactEmail: lucapacioselli@gmail.com
+
+hub:
+  #image:
+  #  name: jupyterhub/jupyterhub
+  #  tag: latest
+  config:
+    Authenticator:
+      admin_users:
+        - test
+    DummyAuthenticator:
+      password: <DUMMY_PASSWORD>
+    JupyterHub:
+      authenticator_class: dummy

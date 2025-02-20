@@ -1,0 +1,68 @@
+#Change <YOUR_EMAIL>, <PATH/TO/GIT/CLONED/REPO> and <S3_HOSTNAME> before using this .yaml file.
+
+version: '3.7' 
+
+volumes:
+  letsencrypt:
+    driver: local
+
+networks:
+  net:
+
+services:
+  proxy:
+    container_name: proxy
+    image: traefik:v3.0.4 # change the tag if needed
+    volumes:
+      - letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - ${PWD}/traefik:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    command:
+      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/config"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myhttpchallenge.acme.httpchallenge=true"
+      - "--certificatesresolvers.myhttpchallenge.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myhttpchallenge.acme.email=<YOUR_EMAIL>"
+      - "--certificatesresolvers.myhttpchallenge.acme.storage=/letsencrypt/acme2.json"
+      # Use this when testing, comment it when you are ready for a real certificate
+      #- "--certificatesresolvers.myhttpchallenge.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+    networks:
+      - net
+  minio:
+    container_name: minio
+    image: quay.io/minio/minio:RELEASE.2024-06-29T01-20-47Z # change the tag if needed
+    ports:
+      - 9000
+    command:
+      - server
+    environment:
+      - MINIO_CONFIG_ENV_FILE=/etc/config.env
+    networks:
+      - net
+    volumes:
+      - /<PATH/TO/GIT/CLONED/REPO>/data:/data
+      - /<PATH/TO/GIT/CLONED/REPO>/config.env:/etc/config.env
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.minio-redirect-ssl.redirectscheme.scheme=https"
+      - "traefik.http.routers.minio-nossl.middlewares=minio-redirect-ssl"
+      - "traefik.http.routers.minio-nossl.rule=Host(`<S3_HOSTNAME>`)"
+      - "traefik.http.routers.minio-nossl.entrypoints=web"
+      - "traefik.http.routers.minio.rule=Host(`<S3_HOSTNAME>`)"
+      - "traefik.http.routers.minio.entrypoints=websecure"
+      - "traefik.http.routers.minio.tls.certresolver=myhttpchallenge"
+      - "traefik.http.routers.minio.tls=true"
+      - "traefik.http.services.minio.loadbalancer.server.port=9000"
