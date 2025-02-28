@@ -59,16 +59,16 @@ ingress:
   tls:
     - secretName: tls-rucio-webui
 
-secretMounts:
-  - secretName: ca-cert
-    mountPath: /etc/grid-security/hostcert.pem
-    subPath: hostcert.pem
-  - secretName: ca-cert
-    mountPath: /etc/grid-security/hostkey.pem
-    subPath: hostkey.pem
-  - secretName: ca-bundle
-    mountPath: /etc/pki/ca-trust/source/anchors/ca.pem
-    subPath: ca.pem
+# secretMounts:
+#   - secretName: ca-cert
+#     mountPath: /etc/grid-security/hostcert.pem
+#     subPath: hostcert.pem
+#   - secretName: ca-cert
+#     mountPath: /etc/grid-security/hostkey.pem
+#     subPath: hostkey.pem
+#   - secretName: ca-bundle
+#     mountPath: /etc/pki/ca-trust/source/anchors/ca.pem
+#     subPath: ca.pem
 #secretMounts: []
 # - volumeName: gcssecret
 #   secretName: gcssecret
@@ -94,7 +94,7 @@ config:
     keep_alive_timeout: "5"
     max_keep_alive_requests: "128"
     threads_limit: "128"
-    max_request_workers: "1280"
+    max_request_workers: "50" #1280
     max_connections_per_child: "2048"
 
   ## Rucio WebUI specific configuration for apache
@@ -121,7 +121,7 @@ config:
     oidc_enabled: "False"
     # A csv string of names of supported oidc providers that will be configured in the webui. For example: "cern,indico"
     oidc_providers: ""
-    server_ca_bundle: /etc/pki/ca-trust/source/anchors/ca.pem #/etc/grid-security/ca.pem
+    server_ca_bundle: /etc/grid-security/ca.pem #/etc/pki/ca-trust/source/anchors/ca.pem #
 
   oidc_providers:
     cern:
