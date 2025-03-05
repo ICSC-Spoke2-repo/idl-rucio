@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 ################# WARNING ##################
 # FOR NOW I'M DISABLING THE HTTPS CONNCECTION WARNING, BUT THIS CAN HIDE SOME REAL HTTPS ISSUES!!!
@@ -68,6 +68,7 @@ import json
 import ast
 import re
 import os
+import numpy as np
 
 # Dynamically retrieving the list of rucio and rucio-admin commands
 result = subprocess.run(["rucio", "--help"], capture_output=True, text=True)
@@ -498,9 +499,8 @@ def customListDids(args): #scope, filters
         except Exception as e:
             print(f"Error: {e}")
 
-def customQuery(args): #scope, select, filters
+def customQuery(args): #scope, select, filters, "delete"
     client = get_client(args)
-    #did_name = file.split('/')[-1] # Use the file name as the DID name
     did_scope = args.scope
     try:
         filters = parse_filters(args.filters)
@@ -508,7 +508,6 @@ def customQuery(args): #scope, select, filters
             for key, value in fil.items():
                 if key.startswith("EPOCH") or key.startswith("CREATION_DATE"):
                     value = np.datetime64(f'{value}')
-        #i = 1
         # For now, I'm passing the SELECTs to the plugin via the filters
         if args.select:
             select_dict = {'sql_select': args.select + ', LINK'}
@@ -545,8 +544,20 @@ def customQuery(args): #scope, select, filters
 
 # Customization WIP...
 @exception_handler
-def delete_metadata(args):
-    pass
+def delete_metadata(args): # did
+    client = get_client(args)
+    try:
+        for did in args.did:
+            did_scope = did.split(":")[0]
+            did_name = did.split(":")[1]
+            filters = "Work = Around"
+            filters = parse_filters(filters)
+            filters.append({"del_select": did_name})
+            result = client.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False)
+            if result["delete"] == "Success":
+                print(f"Metadata of DID: {did_scope}:{did_name} DELETED")
+    except Exception as e:
+        print(f"Error: {e}")
 
 def erase(args):
     pass
@@ -649,6 +660,13 @@ You can filter by key/value, e.g.::
     pars_sql.add_argument("--scope", type=str, required=True, help="Scope")
     pars_sql.add_argument("--filters", type=str, required=True, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used")
     pars_sql.add_argument("--select", type=str, help="SELECTs for SQL queries, e.g. --select 'PARTICIPANT_1, EPOCH'. The LINK, which is the DID, is always present in the selects")
+    pars_sql.add_argument("--delete", type=str, help=help=argparse.SUPPRESS())
+
+    # Subparser delete-metadata 
+    pars_sql = subparsers.add_parser("delete-metadata", help="List of DIDs satisfying the filters, each one in a dictionary where the key are the SELECTs")
+    pars_sql.set_defaults(function=customQuery)
+    # Get's args and flags
+    pars_sql.add_argument("--did", type=str, help="DIDs for which metadata in AyraDB need to be deleted.")
 
     # Subparser upload
     pars_upload = subparsers.add_parser("upload", help="Upload and set-metadata of one or multiple files.")
@@ -689,12 +707,6 @@ You can filter by key/value, e.g.::
     # set_metadata_parser.add_argument('--did', dest='did', action='store', help='Data identifier whose metadata will be set', required=True)
     # set_metadata_parser.add_argument('--key', dest='key', action='store', help='Attribute key', required=True)
     # set_metadata_parser.add_argument('--value', dest='value', action='store', help='Attribute value', required=True)
-
-    # delete-did-meta subparser
-    delete_metadata_parser = subparsers.add_parser('delete-metadata', help='delete metadata')
-    delete_metadata_parser.set_defaults(function=delete_metadata)
-    delete_metadata_parser.add_argument('--did', dest='did', action='store', help='Data identifier to delete', required=True)
-    delete_metadata_parser.add_argument('--key', dest='key', action='store', help='Attribute key', required=True)
 
     return oparser     
 

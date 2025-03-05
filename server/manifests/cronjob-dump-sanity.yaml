@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: periodic-dump-and-sanity-check
+spec:
+  schedule: "0 0 * * *"  # Runs every 24 hours at midnight
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cron-dump-and-sanity
+            image: lucapacioselli/ayradb-dump-sanity:test-v0.0.1
+            imagePullPolicy: Always
+            command: ["idl_dump.py"]
+            volumeMounts:
+            - name: ayradb-creds-volume
+              mountPath: "/etc/config"
+              readOnly: true
+          volumes:
+          - name: ayradb-creds-volume
+            secret:
+              secretName: server-ayradb-cluster
+          restartPolicy: Never
+

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: manual-dump-and-sanity-check
+spec:
+  containers:
+  - name: manual-dump-and-sanity-check
+    image: lucapacioselli/ayradb-dump-sanity:test-v0.0.1
+    imagePullPolicy: Always
+    command: [ "sleep", "infinity" ]  # Keeps the container running
+    volumeMounts:
+    - name: ayradb-creds-volume
+      mountPath: "/etc/config"
+      readOnly: true
+  volumes:
+  - name: ayradb-creds-volume
+    secret:
+      secretName: server-ayradb-cluster
+  restartPolicy: Never
+
