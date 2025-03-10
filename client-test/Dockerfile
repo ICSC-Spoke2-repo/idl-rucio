@@ -3,7 +3,7 @@ FROM rucio/rucio-clients:release-35.6.1
 USER root
 
 # Rucio.cfg template for IDL
-COPY ./configs/rucio.cfg /opt/rucio/etc/rucio.cfg
+COPY ./client-test/rucio.cfg /opt/rucio/etc/rucio.cfg
 
 # Custom client for IDL
 COPY ./client-test/IDL /usr/local/bin/IDL

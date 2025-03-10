@@ -307,87 +307,78 @@ class CustomDidMetaPlugin(DidMetaPlugin):
     def list_dids(self, scope, filters, did_type='all', ignore_case=False, limit=None, 
                   offset=None, long=False, recursive=False, ignore_dids=None, *, session: "Optional[Session]" = None):
 
-        # Backwards compatibility for filters as single {}.
-        if isinstance(filters, dict):
-            filters = [filters]
+        try:
+            # Backwards compatibility for filters as single {}.
+            if isinstance(filters, dict):
+                filters = [filters]
+            
+            # Workaround to call delete-metadata for an external metadata DB
+            if any("del_select" in elem for elem in filters):
+                did_name = next((d["del_select"] for d in filters if "del_select" in d), None)
+                self.delete_metadata(scope=scope, name=did_name, key="Placeholder")
+                return {"delete": "Success"}
 
-        # Debug
-        #print(filters)
-        #print(type(filters))
+            # I am passing the SELECTs in the filters in the Client as a list in the list of dicts that is the filters. Here in the plugin I split the two infos
+            select_list = [elem for elem in filters if 'sql_select' in elem]
+            select = select_list[0]['sql_select']
+
+            filters = [elem for elem in filters if 'sql_select' not in elem]
+
+            # Build SQL query
+            def build_sql_query(filter):
+                conditions = []
+                for filter_dict in filter:
+                    and_conditions = []
+                    for key, value in filter_dict.items():
+                        if key != 'name':
+                            field, operator = key.split(".") 
+                            and_conditions.append(f"{field}{operator}'{value}'") 
+                        else:
+                            pass
+                    conditions.append(f"{' AND '.join(and_conditions)}")
         
-        # I am passing the SELECTs in the filters in the Client as a list in the list of dicts that is the filters. Here in the plugin I split the two infos
-        select_list = [elem for elem in filters if 'sql_select' in elem]
-        # print(select_list)
-        select = select_list[0]['sql_select']
-        # print(select)
+                # Join OR conditions
+                where_clause = ' OR '.join(conditions)
+                query = f"SELECT {select} FROM ayradb.metadata WHERE {where_clause};"
+                return query
 
-        filters = [elem for elem in filters if 'sql_select' not in elem]
-        #for fil in filters:
-        #    for key in fil:
-        #        if key.startswith("EPOCH"):
-        #            
-        #        elif key.startswith("CREATION_DATE"): 
+            try:
+                query = build_sql_query(filters)
+            except:
+                raise Exception("The builfing of the SQL query went wrong")
 
-        # print(filters)
-
-        # Build SQL query
-        def build_sql_query(filter):
-            conditions = []
-            for filter_dict in filter:
-                and_conditions = []
-                for key, value in filter_dict.items():
-                    if key != 'name':
-                        #if '.' in key:
-                        field, operator = key.split(".")    #field, operator = key.split(".")
-                            # Map back to the actual SQL operators
-                            #operator_map = {
-                            #    'gte': '>=',
-                            #    'lte': '<=',
-                            #    'gt': '>',
-                            #    'lt': '<',
-                            #    'ne': '!='
-                            #}
-                            #sql_operator = operator_map[operator]
-                        #else:
-                            #field = key
-                            #sql_operator = '='
-                        and_conditions.append(f"{field}{operator}'{value}'") #and_conditions.append(f"{field}{sql_operator}'{value}'")
+            try:
+                # Management of temporary failures of SQL queries
+                max_attempts = 30 # set the maximum number of attempts, or 0 for unlimited attempts
+                n_attempts = 0
+                keep_trying = True
+                while keep_trying:
+                    res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, query, warehouse_query=True)       
+                    if res == False and error is not None and 'AYRADB_TEMPORARY_ERROR' in error:
+                        n_attempts += 1
+                        if max_attempts > 0 and n_attempts > max_attempts:
+                            keep_trying = False
+                        else:
+                            time.wait(10)
                     else:
-                        pass
-                conditions.append(f"{' AND '.join(and_conditions)}")
-    
-            # Join OR conditions
-            where_clause = ' OR '.join(conditions)
-            query = f"SELECT {select} FROM ayradb.metadata WHERE {where_clause};"
-            return query
+                        keep_trying = False
+                
+                # Convert the Python dicts from bytearrays to strings and append to a list
+                results = []
+                for dicts in records:
+                    converted_dict = self.convert_bytearrays(dicts)
+                    if converted_dict['LINK'].split(':')[0] == f"{scope}":
+                        results.append(converted_dict)
 
-        query = build_sql_query(filters)
-
-        # Debug
-        # print(query)
-
-        res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, query, warehouse_query=True)          
-
-        # Debug
-        #print(records)
-        #print(records[0])
-        #print(records[len(records)-1])
-
-        # Convert the Python dicts from bytearrays to strings and append to a list
-        results = []
-        for dicts in records:
-            converted_dict = self.convert_bytearrays(dicts)
-            if converted_dict['LINK'].split(':')[0] == f"{scope}":
-                results.append(converted_dict)
-
-        # Debug
-        #print(results)
-
-        # Check result of getting the metadata for a DID
-        if res == False:
-            print(f'ERROR: listing the DIDs: {error}')
-        elif res == True:
-            return results
+                # Check result of getting the metadata for a DID
+                if res == False:
+                    raise Exception(f'ERROR: listing the DIDs: {error}')
+                elif res == True:
+                    return results
+            except:
+                raise
+        except:
+            raise
 
     def manages_key(self, key, *, session: "Optional[Session]" = None):
         return True

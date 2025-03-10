@@ -42,7 +42,7 @@ ingress:
   enabled: true
   annotations:
     nginx.ingress.kubernetes.io/frontend-entry-points: http, https
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
     cert-manager.io/cluster-issuer: letsencrypt-prod-issuer # this is the case of the ICSC/INFN Cloud Dashboard, otherwise you need to follow the Vanilla integration
   ingressClassName: nginx
   hosts:

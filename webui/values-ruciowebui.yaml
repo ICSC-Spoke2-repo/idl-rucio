@@ -59,7 +59,10 @@ ingress:
   tls:
     - secretName: tls-rucio-webui
 
-# secretMounts:
+secretMounts:
+  - secretName: rse-accounts
+    mountPath: /opt/rucio/etc/rse-accounts-template.cfg
+    subPath: rse-accounts-template.cfg
 #   - secretName: ca-cert
 #     mountPath: /etc/grid-security/hostcert.pem
 #     subPath: hostcert.pem
@@ -147,6 +150,9 @@ config:
   logs:
     exposeHttpdLogs: true
     exposeWebuiLogs: true
+  
+  credentials:
+    gcs: "/opt/rucio/etc/rse-accounts-template.cfg"
 
 # additional environment variables to set in the webui container as hardcoded key value pairs
 optionalConfig: {}

@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: rucio-client-root
-        image: lucapacioselli/rucio-client-test:test-v1.1.6
+        image: lucapacioselli/rucio-client-test:test-v1.1.7
         command: ["/bin/bash"]
         args: ["-c", "mkdir -p /opt/rucio/etc; echo ready; while true; do sleep 60; done"]
         env:

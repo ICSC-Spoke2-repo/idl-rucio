@@ -162,7 +162,9 @@ secretMounts:
     secretFullName: ca-cert
     mountPath: /etc/grid-security/certificates/5fca1cb1.0
     subPath: tls.cert
-
+  - secretName: rse-accounts
+    mountPath: /opt/rucio/etc/rse-accounts.cfg
+    subPath: rse-accounts.cfg
 # ftsRenewal:
 #   enabled: 1
 #   image:
@@ -222,3 +224,6 @@ config:
 
   monitor:
     user_scope: "tutorial"
+
+  credentials:
+    gcs: "/opt/rucio/etc/rse-accounts.cfg"

@@ -36,9 +36,9 @@ RUN pip3 install argcomplete
 # Copy files in the image because I can move them as root from the Dockerfile
 COPY ./script_jhub.sh /opt/conda/script_jhub.sh
 RUN chmod 555 /opt/conda/script_jhub.sh
-COPY /home/paciosel/idl-rucio/client-test/IDL /usr/local/bin/IDL
+COPY ./client-test/IDL /usr/local/bin/IDL
 RUN chmod 555 /usr/local/bin/IDL
-COPY ./cred.py /usr/local/bin/cred.py
+COPY ./jupyterhub/cred.py /usr/local/bin/cred.py
 RUN chmod 555 /usr/local/bin/cred.py
 
 RUN mkdir /opt/conda/rt-kernels/
