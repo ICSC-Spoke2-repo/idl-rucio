@@ -4,7 +4,8 @@ traceReplicaCount: 0
 
 image:
   repository: lucapacioselli/rucio-server
-  tag: v1.0.4
+  tag: test-v1.0.5
+  pullPolicy: Always
 
 secretMounts:
   - secretName: plugin
@@ -13,6 +14,9 @@ secretMounts:
   - secretName: ayradb-cluster
     mountPath: /tmp/metaDB_credentials_template.cfg # change with the real one
     subPath: metaDB_credentials_template.cfg # change with the real one
+  - secretName: root-rucio
+    mountPath: /tmp/rucio_template.cfg # change with the real one
+    subPath: rucio_template.cfg # change with the real one
   - secretName: permissions
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/permission/permissions.py
     subPath: permissions.py

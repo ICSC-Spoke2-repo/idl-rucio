@@ -2,6 +2,8 @@ FROM rucio/rucio-clients:release-35.6.1
 
 USER root
 
+RUN pip install numpy
+
 # Rucio.cfg template for IDL
 COPY ./client-test/rucio.cfg /opt/rucio/etc/rucio.cfg
 
