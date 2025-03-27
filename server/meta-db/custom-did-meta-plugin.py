@@ -39,6 +39,7 @@ from datetime import datetime
 # Old includes for postgres did-meta plugin
 import json
 import os
+import shutil
 import operator
 from typing import TYPE_CHECKING
 
@@ -110,7 +111,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         self.field_labels = ['*']
 
         ########## blockchain ##################
-        self.blockchainUrl = "https://<BLOCKCHAIN_URL>:3000"
+        self.blockchainUrl = "https://vm-131-154-99-190.cloud.cnaf.infn.it:3000"
         self.headers = {"content-type": "application/x-www-form-urlencoded"}
         ########################################
 
@@ -151,55 +152,32 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :param session: The database session in use.
         """
         if key == "JSON":
-            try:
-                # Use this Python dict to add the DID, which is unique in Rucio, in the "LINK" field or, in general,to edit the fields if needed 
-                dict = json.loads(value) 
-                
-                self.fields = {keys: values for keys, values in dict.items() if keys != 'sha256'}
-
-                # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
-                try:
-                    key = adbc__generate_record_key_from_field(self.fields['LINK'])
-                except Exception as e:
-                    raise Exception(f'Failed to generate key for AyraDB: {str(e)}')
-
-                # Write the record on AyraDB
-                try:
-                    res, error = adbc_1liner__write_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.fields)
-                    
-                    if res == False:
-                        raise Exception(f"Failed to write the metadata record: {error}")
-                    elif res == True:
-                        print('Successfully wrote the metadata record!')
-                except Exception as e:
-                    print(f'Error writing metadata record: {str(e)}')  # Display in the server logs the raised error message
-                    raise  # Re-raise the original exception
-        
-                # Dump the metadata table to the internal warehouse
-                try:
-                    res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
-
-                    if res_dump_table == False:
-                        raise Exception(f"Failed to dump the table: {error_dump}")
-                    elif res_dump_table == True:
-                        print('Successfully dumped the table!')
-                except Exception as e:
-                    print(f'Error dumping the table: {str(e)}') # Display in the server logs the raised error message
-                    raise  # Re-raise the original exception
-
-                ######## blockchain ###########
-                try:
-                    self.set_blockchain(value)
-                except Exception as e:
-                    # TO-DO: implement the raise error when in production/on ICSC resources
-                    # Exception management to avoid internal errors due to possible blockchain server errors
-                    print(f'Error contacting blockchain. ERROR: {str(e)}')
-                    #raise exception.DatabaseException("Failed to contact the blockchain")
-                
-                ###########################
-                
-            except Exception as e:
-                raise
+            dir_path = "/tmp/" + "_".join(name.split("_")[:-1])
+            if name.split("_")[-1] == "START.json":
+                os.makedirs(dir_path)
+                print(f"Directory '{dir_path}' created successfully!")
+            if name.split("_")[-1] == "END.json":
+                import subprocess
+                result = subprocess.run(["pipelined_utils.py", "set", "--dir", f"{dir_path}"], capture_output=True, text=True)
+                results = eval(result.stdout)
+                print("Error:", result.stderr)
+                if result.stderr == "":
+                    for value in results:
+                        ######## BLOCKCHAIN ###########
+                        try:
+                            self.set_blockchain(value)
+                        except Exception as e:
+                            # print(f'Error contacting blockchain. ERROR: {str(e)}')
+                            raise Exception("Failed to contact the blockchain.")
+                        ###########################
+            if name.split("_")[-1] != "START.json" and name.split("_")[-1] != "END.json":
+                if not os.path.exists(dir_path):
+                    os.makedirs(dir_path)
+                dict = json.loads(value) # writes also the sha256 to the tmp file!
+                tmp_file_path = os.path.join(dir_path, name)
+                with open(tmp_file_path, 'w') as f:
+                    json.dump(dict, f, indent=4)
+                print(f"Metadata file '{tmp_file_path}' saved in '{dir_path}'!")
         else:
             print('Key must be "JSON"')
             #raise Exception("Key must be 'JSON'")
@@ -214,66 +192,55 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :returns: the metadata for the did
         """
         # For now, I am passing the hash_data and did_name in the argument "name" in the Client as "{hash_data}:{did_name}". Here in the plugin I split the two infos
+        dir_name = name.split('|')[0]
+        name = name.split('|')[1]
         hash_data = name.split(':')[0]
         clean_name = name.split(':')[1]
 
-        # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
-        try:
-            key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, clean_name))
-        except Exception as e:
-            raise Exception(f'Failed to generate key for AyraDB: {str(e)}')
-
-        # Get the record from AyraDB
-        try:
-            res, error, record = adbc_1liner__read_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key, self.field_labels)
-            
-            if res == False:
-                raise Exception(f"Failed to get the records: {error}")
-            elif res == True:
-                print('Successfully read the metadata records!')
-
-                # Convert the Python dict from bytearrays to strings
+        dir_path = "/tmp/" + f"get-metadata_{dir_name}"
+        
+        if clean_name == "START":
+            os.makedirs(dir_path)
+            print(f"Directory '{dir_path}' created successfully!")
+            return {"First": "Success"}
+        if clean_name == "END":
+            import subprocess
+            result = subprocess.run(["pipelined_utils.py", "get", "--dir", f"{dir_path}"], capture_output=True, text=True)
+            results = eval(result.stdout)
+            print("Error:", result.stderr)
+            results = self.convert_bytearrays(results)
+            output = {"Output": results}
+            if hash_data == "get-metadata_handling":
+                # Return the converted metadata record
+                return output
+            else:
+                ######## blockchain ###########
                 try:
-                    converted_dict = self.convert_bytearrays(record)
-                except Exception as e:
-                    raise Exception(f'Error converting the records from bytearrays: {str(e)}')
-                
-
-                if hash_data == "get-metadata_handling":
-                    # Return the converted metadata record
-                    return converted_dict
-                else:
-                    ######## blockchain ###########
-                    try:
+                    for converted_dict in output["Output"]:
                         # Computation of metadata_hash for the get_from_blockchain method  
                         metahash_dict = {keys: values for keys, values in converted_dict.items()}
-
-                        # Values wrangling 
-                        # string = metahash_dict["EPOCH"]
-                        # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{string.microsecond:06d}"
-                        # The next two lines are needed because during set_metadata the metadata_hash for the blockchain has been computed with "2024-09-14T23:20:02.120928" format, but when it is returned by the DB cluster it has a space instead of the 'T'
-                        # If you don't do this replacement, the metadata_hash computed in line 292 will be different and the validate_data will return Fals
-                        # metahash_dict["EPOCH"] = metahash_dict["EPOCH"].replace(' ', 'T')
-                        # metahash_dict["CREATION_DATE"] = metahash_dict["CREATION_DATE"].replace(' ', 'T')
 
                         metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
                         print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash))
 
                         if self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash) == "The metadata hash is not the same":
                             raise Exception("The hashes are different from the ones in the blockchain!")
-                        else:
-                            # Return the validated metadata record
-                            return converted_dict
-                    except Exception as e:
-                        # TO-DO: implement the raise error when in production/on ICSC resources
-                        # Exception management to avoid internal errors due to possible blockchain server errors
-                        print(f'Error contacting blockchain. ERROR: {str(e)}')
-                        raise #exception.DatabaseException("Failed to contact the blockchain")
-                    ###########################
-            
-        except Exception as e:
-            print(f'Error getting records: {str(e)}')  # Display in the server logs the raised error message
-            raise  # Re-raise the original exception
+                    # Return the validated metadata record
+                    return output
+                except Exception as e:
+                    # TO-DO: implement the raise error when in production/on ICSC resources
+                    # Exception management to avoid internal errors due to possible blockchain server errors
+                    print(f'Error contacting blockchain. ERROR: {str(e)}')
+                    raise #exception.DatabaseException("Failed to contact the blockchain")
+                ###########################
+        if clean_name != "START" and clean_name != "END":
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path)
+            file_path = os.path.join(dir_path, dir_name)
+            with open(file_path, 'a') as f:
+                f.write(f"{scope}:{clean_name}\n")
+            print(f"DID '{scope}:{clean_name}' written in '{file_path}'!")
+            return {"Middle": "Success"}
 
     def delete_metadata(self, scope, name, key, *, session: "Optional[Session]" = None):
         """
@@ -295,14 +262,6 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             print(f'ERROR: deleting the record: {error}' )
         elif res == True:
             print('Successfully deleted record')
-        
-        res_dump_table, error_dump = adbc_1liner__dump_table_to_warehouse__wrapper(self.ayradb_servers, self.credentials, self.table_name, self.field_labels_string)
-                
-        # Check result of dumping table
-        if res_dump_table == False:
-            print(f'ERROR: dumping table: {error_dump}')
-        elif res_dump_table == True:
-            print('Successfully dumped the table!')
 
     def list_dids(self, scope, filters, did_type='all', ignore_case=False, limit=None, 
                   offset=None, long=False, recursive=False, ignore_dids=None, *, session: "Optional[Session]" = None):
@@ -359,7 +318,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                         if max_attempts > 0 and n_attempts > max_attempts:
                             keep_trying = False
                         else:
-                            time.wait(10)
+                            time.sleep(10)
                     else:
                         keep_trying = False
                 
@@ -461,6 +420,3 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             return asset
         else:
             print("The metadata hash is not the same")
-
-
-

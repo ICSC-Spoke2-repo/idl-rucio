@@ -4,7 +4,7 @@ traceReplicaCount: 0
 
 image:
   repository: lucapacioselli/rucio-server
-  tag: test-v1.0.5
+  tag: v1.0.5
   pullPolicy: Always
 
 secretMounts:

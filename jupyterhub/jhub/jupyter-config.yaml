@@ -18,8 +18,8 @@ singleuser:
     # Inspect the Dockerfile at:
     # https://github.com/jupyter/docker-stacks/tree/HEAD/datascience-notebook/Dockerfile
     name: lucapacioselli/jupyter4rucio #jupyter/tensorflow-notebook 
-    tag: test-v1.0.9 #v1.0.8 #ubuntu-22.04
-    pullPolicy: Always 
+    tag: v1.0.9 #v1.0.8 #ubuntu-22.04
+    # pullPolicy: Always 
   # `cmd: null` allows the custom CMD of the Jupyter docker-stacks to be used
   # which performs further customization on startup.
   cmd: null

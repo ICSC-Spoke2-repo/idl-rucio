@@ -26,8 +26,8 @@ RUN apt update -y \
 RUN /opt/conda/bin/python3 -m pip install ipykernel
 
 # Setup extension Rucio instance config
-ADD configure.py /opt/setup/configure.py
-ADD setup.sh /usr/local/bin/setup.sh
+ADD ./jupyterhub/jlab/configure.py /opt/setup/configure.py
+ADD ./jupyterhub/jlab/setup.sh /usr/local/bin/setup.sh
 RUN fix-permissions /opt/setup \
     && fix-permissions /usr/local/bin/setup.sh \
     && sed -i -e 's/\r$/\n/' /usr/local/bin/setup.sh \
@@ -48,7 +48,7 @@ RUN mkdir -p /opt/rucio \
     && chown -R $NB_UID /etc/jupyter/jupyter_notebook_config.json 
 
 ENV IPYTHONDIR=/etc/ipython
-ADD ipython_kernel_config.json /etc/ipython/profile_default/ipython_kernel_config.json
+ADD ./jupyterhub/jlab/ipython_kernel_config.json /etc/ipython/profile_default/ipython_kernel_config.json
 RUN chown -R $NB_UID /etc/ipython
 ENV JUPYTER_ENABLE_LAB=yes
 
@@ -65,9 +65,9 @@ ENV PATH="/usr/local/bin:${PATH}"
 RUN /opt/conda/bin/python3 -m pip install argcomplete 
 
 # Copy files in the image because I can move them as root from the Dockerfile
-COPY IDL /usr/local/bin/IDL
+COPY ./client-test/IDL /usr/local/bin/IDL
 RUN chmod 555 /usr/local/bin/IDL
-COPY cred.py /usr/local/bin/cred.py
+COPY ./jupyterhub/jlab/cred.py /usr/local/bin/cred.py
 RUN chmod 555 /usr/local/bin/cred.py
 
 RUN jupyter lab build

@@ -48,6 +48,8 @@ from rucio.common.exception import (
     InvalidRSEExpression,
     InvalidType,
     MissingDependency,
+    NoFilesUploaded,
+    NotAllFilesUploaded,
     RSENotFound,
     RucioException,
     RuleNotFound,
@@ -327,8 +329,10 @@ def customUpload(args): #--scope, --rse, --file, --meta, --bulk-txt
     :param meta: file path of the .json metadata file
     '''
     client = get_client(args)
+    import random
+    import string
     from rucio.client.uploadclient import UploadClient 
-    uplc = UploadClient(client, logger=logger)
+    uplc = UploadClient(client)
     
     try:
         # Bulk upload from a .txt file with a data pfn metadata pfn pair, separated by a space, for each line
@@ -340,7 +344,7 @@ def customUpload(args): #--scope, --rse, --file, --meta, --bulk-txt
                         line = line.strip().split()
                         # Verify the schema of the .txt file
                         if len(line) != 2:
-                            raise ValueError(f"Line {idx}: Expected 2 elements but found {len(line)}")
+                            raise Exception(f"Line {idx}: Expected 2 elements but found {len(line)}")
                         data_file, meta_file = line
                         data_meta_pairs.append((data_file, meta_file))
             except Exception as e:
@@ -349,23 +353,49 @@ def customUpload(args): #--scope, --rse, --file, --meta, --bulk-txt
             # File and metadata pairs must be of the same number 
             if len(args.file) != len(args.meta):
                 raise Exception("The number of data files and metadata files must be the same.")
-            data_meta_pairs = zip(args.file, args.meta)
+            data_meta_pairs = list(zip(args.file, args.meta))
 
+        did_scope = args.scope
+        items = []
         for file, meta in data_meta_pairs:
             did_name = file.split('/')[-1] # Use the file name as the DID name
-            did_scope = args.scope
-            try:
-                # Upload the file
-                uplc.upload([{
-                    'path': file,
-                    'rse': args.rse,
-                    'did_scope': did_scope,
-                    'did_name': did_name, 
-                    'register_after_upload': True 
-                }])
-            except Exception as e:
-                raise Exception("ERROR: Upload failed")
+            data_file = {}
+            data_file['path'] = file
+            data_file['rse'] = args.rse
+            data_file['did_scope'] = did_scope
+            data_file['did_name'] = did_name
+            data_file['register_after_upload'] = True
+            items.append(data_file)
+        try:
+            uplc.upload(items, summary_file_path = '/tmp/rucio_upload.json')
+        except NoFilesUploaded as e:
+            raise NoFilesUploaded("ERROR: Upload failed")
+        except NotAllFilesUploaded as e:
+            logging.warning("Not all files uploaded. Failed upload for:\n")
+            with open("/tmp/rucio_upload.json", 'r', encoding='utf-8') as f:
+                summary = json.load(f)
+            success_upload = []
+            for file, meta in data_meta_pairs:
+                did_name = file.split('/')[-1]
+                if f"{did_scope}:{did_name}" in summary:
+                    success_upload.append((file, meta))
+                else:
+                    logging.warning(f"{did_scope}:{did_name}\n")
+            data_meta_pairs = success_upload
+        except Exception as e:
+            raise Exception(f"ERROR: something went wrong: {e}")
+        logging.info("Set-metadata for the uploaded files...")
+        
+        time_of_set_operation = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+        random_7_digits = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
+        start_file = f"{did_scope}_{time_of_set_operation}_{random_7_digits}_START.json"
+        end_file = f"{did_scope}_{time_of_set_operation}_{random_7_digits}_END.json"
 
+        client.set_metadata(scope=did_scope, name=start_file, key="JSON", value="json_string")
+
+        i = 0
+        for file, meta in data_meta_pairs:
+            did_name = file.split('/')[-1] # Use the file name as the DID name            
             try:
                 # Parse the JSON file in a Python dict and add the "DID" and "sha-256" metadata
                 with open(meta, 'r') as m:
@@ -375,10 +405,13 @@ def customUpload(args): #--scope, --rse, --file, --meta, --bulk-txt
                     json_string = json.dumps(json_dict)
 
                 # Set the metadata for the uploaded file
-                client.set_metadata(scope=did_scope, name=did_name, key="JSON", value=json_string)
+                client.set_metadata(scope=did_scope, name=f"{did_scope}_{time_of_set_operation}_{random_7_digits}_{i}.json", key="JSON", value=json_string)
+                i += 1
             except Exception as e:
                 raise Exception("ERROR: Set-metadata failed")
         
+        client.set_metadata(scope=did_scope, name=end_file, key="JSON", value="json_string")
+
     except Exception as e:
         raise
     
@@ -396,15 +429,22 @@ def customDownload(args): #--scope, --file, --base_dir, --no_subdir, --bulk
         
         dwn_file = dwnc.download_dids(items=[{'did': did, 'base_dir': args.base_dir, 'no_subdir': args.no_subdir}])
 
+        import random
+        import string
+        time_of_set_operation = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+        random_7_digits = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
+        start_file = f"{time_of_set_operation}_{random_7_digits}|get-metadata_handling:START" # 100 characters without the real name
+        end_file = f"{time_of_set_operation}_{random_7_digits}|get-metadata_handling:END" # 98 characters without the real name
+
         hash_data = sha256(dwn_file[0]['temp_file_path'][:-5])
-        check_name = hash_data + ":" + name
+        check_name = f"{time_of_set_operation}_{random_7_digits}|" + hash_data + ":" + name
 
-        metas = client.get_metadata(scope=args.scope, name=check_name, plugin="IDL")
+        _ = client.get_metadata(scope="START", name=start_file, plugin="IDL")
 
-        # I'm printing the dwn_file dict. The file is downloaded automatically
-        max_key_length = max(len(key) for key in dwn_file[0].keys())
-        for keys, values in dwn_file[0].items():
-            print(f"{keys}:".ljust(max_key_length + 1) + f"  {values}")
+        _ = client.get_metadata(scope=args.scope, name=check_name, plugin="IDL")
+
+        meta = client.get_metadata(scope="END", name=end_file, plugin="IDL")
+
 
 # Not needed for the IDL project
 #def customSetMeta(self, scope, file, meta):
@@ -440,16 +480,51 @@ def customGetMeta(args): #--plugin, dids
     '''
     client = get_client(args)
     if args.plugin == "IDL":
+        # Bulk upload from a .txt file with a data pfn metadata pfn pair, separated by a space, for each line
+        if args.bulk_txt != " ":
+            did_list = []
+            try:
+                with open(args.bulk_txt, 'r') as f:
+                    for idx, line in enumerate(f, start=1):
+                        line = line.strip().split()
+                        # Verify the schema of the .txt file
+                        if len(line) != 1:
+                            raise Exception(f"Line {idx}: Expected 1 element for line, but found {len(line)}")
+                        did_list.append(line)
+            except Exception as e:
+                logging.error(f"{e}")
+        else:
+            did_list = args.dids
+
+        print(did_list)
+
+        import random
+        import string
+        time_of_set_operation = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+        random_7_digits = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
+        start_file = f"{time_of_set_operation}_{random_7_digits}|get-metadata_handling:START" # 59 characters without the real name
+        end_file = f"{time_of_set_operation}_{random_7_digits}|get-metadata_handling:END" # 57 characters without the real name
+
+        _ = client.get_metadata(scope="START", name=start_file, plugin=args.plugin)
+
         try:
-            for i, did in enumerate(args.dids):
-                if i > 0:
-                    print('------')
+            for did in did_list:
                 scope = did.split(':')[0]
                 name = did.split(':')[1]
                 # Handling of the get-metadata logic in the IDL's plugin 
-                name = 'get-metadata_handling:' + name
+                name = f'{time_of_set_operation}_{random_7_digits}|get-metadata_handling:' + name
                 # Get metadatas for the DIDs
-                meta = client.get_metadata(scope=scope, name=name, plugin=args.plugin)
+                _ = client.get_metadata(scope=scope, name=name, plugin=args.plugin)
+        except Exception as e:
+            raise Exception(f"Error:{e}")
+        
+        metas = client.get_metadata(scope="END", name=end_file, plugin=args.plugin)
+        metas = metas["Output"]
+
+        try:
+            for i, meta in enumerate(metas):
+                if i > 0:
+                    print('------')
                 table = [(k + ':', str(v)) for (k, v) in sorted(meta.items())]
                 print(tabulate(table, tablefmt='plain', disable_numparse=True))
             return SUCCESS
@@ -466,7 +541,7 @@ def customGetMeta(args): #--plugin, dids
                 print(tabulate(table, tablefmt='plain', disable_numparse=True))
             return SUCCESS
         except Exception as e:
-            print(f"Error: {e}")
+            raise Exception(f"ERROR: {e}")
 
 @exception_handler
 def customListDids(args): #scope, filters
@@ -700,6 +775,8 @@ You can filter by key/value, e.g.::
     #pars_get.add_argument("--scope", type=str, help="Scope")
     #pars_get.add_argument("--name", type=str, help="Name of the DID")
     pars_get.add_argument("dids", type=str, nargs='+', help="List of DIDs" )
+    pars_get.add_argument("--bulk-txt", default=" ", type=str, help="Specifies the path to a .txt file for bulk get-metadata. The .txt file must contain one for each line the DIDs to get-metadata.")
+
 
     # The set-metadata subparser
     # set_metadata_parser = subparsers.add_parser('set-metadata', help='set-metadata method')
