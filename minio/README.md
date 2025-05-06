@@ -1,5 +1,18 @@
 # MinIO S3 setup
 
+## Sensitive Data
+
+Before using this setup, make sure to edit the following placeholders:
+
+In `config.env`:
+- **root minio:** `<ACCESS_KEY>`, `<SECRET_KEY>`
+- `<S3_HOSTNAME>`
+
+In `docker-compose.yaml`:
+- **Admin email:** `<YOUR_EMAIL>`
+- `<PATH/TO/GIT/CLONED/REPO>`
+- `<S3_HOSTNAME>`
+
 ## Requirements
 
 - Install docker: [https://docs.docker.com/engine/install/ubuntu/#install-from-a-package](https://docs.docker.com/engine/install/ubuntu/#install-from-a-package)

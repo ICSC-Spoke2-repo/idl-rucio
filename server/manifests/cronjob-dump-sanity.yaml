@@ -10,16 +10,28 @@ spec:
         spec:
           containers:
           - name: cron-dump-and-sanity
-            image: lucapacioselli/ayradb-dump-sanity:test-v0.0.1
-            imagePullPolicy: Always
-            command: ["idl_dump.py"]
+            image: lucapacioselli/ayradb-dump-sanity:v0.0.1
+            imagePullPolicy: Always # For testing only
+            command: ["idl_dump.py", "sleep(30)", "idl_consistency_check.py"]
             volumeMounts:
             - name: ayradb-creds-volume
+              mountPath: "/etc/config"
+              readOnly: true
+            - name: rucio-creds-volume
+              mountPath: "/etc/config"
+              readOnly: true
+            - name: rucio-db-creds-volume
               mountPath: "/etc/config"
               readOnly: true
           volumes:
           - name: ayradb-creds-volume
             secret:
               secretName: server-ayradb-cluster
+          - name: rucio-creds-volume
+            secret:   
+              secretName: server-root-rucio
+          - name: rucio-db-creds-volume
+            secret:
+              secretName: rucio-db-creds
           restartPolicy: Never
 

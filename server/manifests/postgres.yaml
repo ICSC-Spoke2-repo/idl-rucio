@@ -6,6 +6,17 @@ image:
 persistence:
   enabled: true
 
+primary:
+  resources:
+    requests:
+      cpu: 2
+      ephemeral-storage: 8Gi
+      memory: 2Gi
+    limits:
+      cpu: 4
+      ephemeral-storage: 16Gi
+      memory: 4Gi
+
 auth:
   username: rucio # change if needed
   password: <DB_PASSWORD>

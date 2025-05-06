@@ -11,25 +11,11 @@ import argparse
 import configparser
 
 config = configparser.ConfigParser()
-config.read('/tmp/metaDB_credentials_template.cfg')
-
-# AyraDB cluster INFN coordinates
-servers = [ {
-        "ip": config.get('server1', 'ip'),
-        "port": int(config.get('server1', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
-        "name": config.get('server1', 'name')
-    },
-    {
-        "ip": config.get('server2', 'ip'),
-        "port": int(config.get('server2', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
-        "name": config.get('server2', 'name')
-    }
-]
+config.read('/tmp/AyraDB_cluster_credentials.cfg')
 
 # INFN cluster credentials
 credentials = { "username": config.get('credentials', 'username'), "password": config.get('credentials', 'password')}
 
-table_name = 'metadata'
 field_labels = ['*']
 
 #Fallback methods
@@ -38,7 +24,7 @@ def customErase(scope, name):
     import os
     os.environ['RUCIO_CONFIG'] = '/tmp/rucio_credentials.cfg'
     config2 = configparser.ConfigParser()
-    config2.read('/tmp/rucio_credentials_template.cfg')
+    config2.read('/tmp/rucio_credentials.cfg')
     username = config2.get('client', 'username')
     password = config2.get('client', 'password')
     account = config2.get('client', 'account')
@@ -75,6 +61,29 @@ def customDeleteMetadata(scope, name):
     # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
     key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, name))
 
+    # AyraDB cluster INFN coordinates
+    servers = [ {
+            "ip": config.get('server1', 'ip'),
+            "port": int(config.get('server1', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+            "name": config.get('server1', 'name')
+        },
+        {
+            "ip": config.get('server2', 'ip'),
+            "port": int(config.get('server2', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+            "name": config.get('server2', 'name')
+        }
+    ]
+    table_name = 'metadata'
+
+    if args.scope in ["fermi", "birales", "pulsar"]:
+        servers = [ {
+                "ip": config.get('server3', 'ip'),
+                "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+                "name": config.get('server3', 'name')
+            }
+        ]
+        table_name = f"metadata{args.scope.capitalize()}"
+
     # Delete record from the SQL table
     res, error = adbc_1liner__delete_record__wrapper(servers, credentials, table_name, key)
 
@@ -86,12 +95,35 @@ def customDeleteMetadata(scope, name):
     
     return res, error
 
-def multi_pipelined_set_metadata(args): # --dir
+def multi_pipelined_set_metadata(args): # --dir --scope
     from adbc.core.adbc_pipelined import multi_pipelined_write__wrapper
     
     values = []
     records = []
     keys = []
+
+    # AyraDB cluster INFN coordinates
+    servers = [ {
+            "ip": config.get('server1', 'ip'),
+            "port": int(config.get('server1', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+            "name": config.get('server1', 'name')
+        },
+        {
+            "ip": config.get('server2', 'ip'),
+            "port": int(config.get('server2', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+            "name": config.get('server2', 'name')
+        }
+    ]
+    table_name = 'metadata'
+    
+    if args.scope in ["fermi", "birales", "pulsar"]:
+        servers = [ {
+                "ip": config.get('server3', 'ip'),
+                "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+                "name": config.get('server3', 'name')
+            }
+        ]
+        table_name = f"metadata{args.scope.capitalize()}"
     
     for filename in os.listdir(args.dir):
         file_path = os.path.join(args.dir, filename)
@@ -143,10 +175,33 @@ def multi_pipelined_set_metadata(args): # --dir
             shutil.rmtree(args.dir)
             raise  # Re-raise the original exception
 
-def multi_pipelined_get_metadata(args): # --dir
+def multi_pipelined_get_metadata(args): # --dir --scope
     from adbc.core.adbc_pipelined import multi_pipelined_read__wrapper
 
     keys = []
+
+    # AyraDB cluster INFN coordinates
+    servers = [ {
+            "ip": config.get('server1', 'ip'),
+            "port": int(config.get('server1', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+            "name": config.get('server1', 'name')
+        },
+        {
+            "ip": config.get('server2', 'ip'),
+            "port": int(config.get('server2', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+            "name": config.get('server2', 'name')
+        }
+    ]
+    table_name = "metadata"
+
+    if args.scope in ["fermi", "birales", "pulsar"]:
+        servers = [ {
+                "ip": config.get('server3', 'ip'),
+                "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+                "name": config.get('server3', 'name')
+            }
+        ]
+        table_name = f"metadata{args.scope.capitalize()}"
 
     for filename in os.listdir(args.dir):
         file_path = os.path.join(args.dir, filename)
@@ -211,12 +266,14 @@ def get_parser():
     pars_upload.set_defaults(function=multi_pipelined_set_metadata)
     # Upload's args and flags
     pars_upload.add_argument("--dir", type=str, required=True, help="Path to the directory in which the metadata to set are stored")
+    pars_upload.add_argument("--scope", type=str, required=True, help="Scope, needed to select the correct metadata table")
 
     # Subparser multi get
     pars_upload = subparsers.add_parser("get", help="Set-metadata of one or multiple files in a multi pipelined fashion.")
     pars_upload.set_defaults(function=multi_pipelined_get_metadata)
     # Upload's args and flags
     pars_upload.add_argument("--dir", type=str, required=True, help="Path to the directory in which the DIDs of the metadata to get are stored")
+    pars_upload.add_argument("--scope", type=str, required=True, help="Scope, needed to select the correct metadata table")
 
     return oparser
 

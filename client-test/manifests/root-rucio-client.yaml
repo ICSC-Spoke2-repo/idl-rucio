@@ -18,9 +18,7 @@ spec:
     spec:
       containers:
       - name: rucio-client-root
-        image: lucapacioselli/rucio-client-test:v1.1.7
-        command: ["/bin/bash"]
-        args: ["-c", "mkdir -p /opt/rucio/etc; echo ready; while true; do sleep 60; done"]
+        image: lucapacioselli/rucio-client-test:v1.1.9
         env:
         - name: RUCIO_CFG_CLIENT_RUCIO_HOST
           value: http://server-rucio-server # intended to be deployed on the same k8s cluster as the server
@@ -34,3 +32,20 @@ spec:
           value: <ROOT_PASSWORD>
         - name: RUCIO_CFG_CLIENT_ACCOUNT
           value: root
+        command: ["/bin/bash"]
+        args:
+        - "-c"
+        - |
+          # Ensure the config directory exists
+          mkdir -p /opt/rucio/etc;
+
+          # Read the existing rucio.cfg file
+          CONFIG_FILE="/opt/rucio/etc/rucio.cfg"
+
+          # Update specific lines in rucio.cfg with environment variables
+          sed -i "s|username = <YOUR_USERNAME>|username = $RUCIO_CFG_CLIENT_USERNAME|" $CONFIG_FILE
+          sed -i "s|password = <YOUR_PASSWORD>|password = $RUCIO_CFG_CLIENT_PASSWORD|" $CONFIG_FILE
+          sed -i "s|account = <YOUR_ACCOUNT_NAME>|account = $RUCIO_CFG_CLIENT_ACCOUNT|" $CONFIG_FILE
+
+          # Keep the container running
+          echo ready; while true; do sleep 60; done;

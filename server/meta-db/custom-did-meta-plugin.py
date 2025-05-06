@@ -45,6 +45,9 @@ from typing import TYPE_CHECKING
 
 import psycopg2
 import psycopg2.extras
+import threading
+import asyncio
+import aiohttp
 
 from rucio.common import config, exception
 from sqlalchemy.exc import CompileError, InvalidRequestError, NoResultFound
@@ -81,7 +84,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         self.plugin_name = "IDL"
 
         config = configparser.ConfigParser()
-        config.read('/tmp/metaDB_credentials_template.cfg') # change with the real one
+        config.read('/tmp/AyraDB_cluster_credentials.cfg')
 
         # AyraDB cluster INFN coordinates
         self.ayradb_servers = [ {
@@ -158,18 +161,28 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 print(f"Directory '{dir_path}' created successfully!")
             if name.split("_")[-1] == "END.json":
                 import subprocess
-                result = subprocess.run(["pipelined_utils.py", "set", "--dir", f"{dir_path}"], capture_output=True, text=True)
+                result = subprocess.run(["pipelined_utils.py", "set", "--dir", f"{dir_path}", "--scope", f"{name.split('_')[0]}"], capture_output=True, text=True)
                 results = eval(result.stdout)
                 print("Error:", result.stderr)
-                if result.stderr == "":
-                    for value in results:
-                        ######## BLOCKCHAIN ###########
-                        try:
-                            self.set_blockchain(value)
-                        except Exception as e:
-                            # print(f'Error contacting blockchain. ERROR: {str(e)}')
-                            raise Exception("Failed to contact the blockchain.")
-                        ###########################
+                # tmp commented due to lack of manpower to mantain it
+                # if result.stderr == "":
+                #     try:
+                #         loop = asyncio.get_running_loop()
+                #         coro = self._run_blockchain_tasks(results)
+                #         loop.create_task(coro)  # fire and forget (non-blocking)
+                #     except RuntimeError:
+                #         asyncio.run(self._run_blockchain_tasks(results))
+                    # tasks = []
+                    # for value in results:
+                    #     ######## BLOCKCHAIN ###########
+                    #     try:
+                    #         tasks.append(threading.Thread(target=self.set_blockchain, args=(value,)))
+                    #     except Exception as e:
+                    #         # print(f'Error contacting blockchain. ERROR: {str(e)}')
+                    #         raise Exception("Failed to contact the blockchain.")
+                    #     ###########################
+                    # for task in tasks:
+                    #     task.start()
             if name.split("_")[-1] != "START.json" and name.split("_")[-1] != "END.json":
                 if not os.path.exists(dir_path):
                     os.makedirs(dir_path)
@@ -205,7 +218,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
             return {"First": "Success"}
         if clean_name == "END":
             import subprocess
-            result = subprocess.run(["pipelined_utils.py", "get", "--dir", f"{dir_path}"], capture_output=True, text=True)
+            result = subprocess.run(["pipelined_utils.py", "get", "--dir", f"{dir_path}", "--scope", f"{dir_name.split('_')[0]}"], capture_output=True, text=True)
             results = eval(result.stdout)
             print("Error:", result.stderr)
             results = self.convert_bytearrays(results)
@@ -214,24 +227,24 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                 # Return the converted metadata record
                 return output
             else:
-                ######## blockchain ###########
-                try:
-                    for converted_dict in output["Output"]:
-                        # Computation of metadata_hash for the get_from_blockchain method  
-                        metahash_dict = {keys: values for keys, values in converted_dict.items()}
+                ######## blockchain ########### tmp commented due to lack of manpower to mantain it
+                # try:
+                #     for converted_dict in output["Output"]:
+                #         # Computation of metadata_hash for the get_from_blockchain method  
+                #         metahash_dict = {keys: values for keys, values in converted_dict.items()}
 
-                        metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
-                        print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash))
+                #         metadata_hash = adbc__generate_record_key_from_field(str(metahash_dict))
+                #         print(self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash))
 
-                        if self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash) == "The metadata hash is not the same":
-                            raise Exception("The hashes are different from the ones in the blockchain!")
+                #         if self.get_from_blockchain(data_hash=hash_data, metadata_hash=metadata_hash) == "The metadata hash is not the same":
+                #             raise Exception("The hashes are different from the ones in the blockchain!")
                     # Return the validated metadata record
-                    return output
-                except Exception as e:
-                    # TO-DO: implement the raise error when in production/on ICSC resources
-                    # Exception management to avoid internal errors due to possible blockchain server errors
-                    print(f'Error contacting blockchain. ERROR: {str(e)}')
-                    raise #exception.DatabaseException("Failed to contact the blockchain")
+                return output
+                # except Exception as e:
+                #     # TO-DO: implement the raise error when in production/on ICSC resources
+                #     # Exception management to avoid internal errors due to possible blockchain server errors
+                #     print(f'Error contacting blockchain. ERROR: {str(e)}')
+                #     raise #exception.DatabaseException("Failed to contact the blockchain")
                 ###########################
         if clean_name != "START" and clean_name != "END":
             if not os.path.exists(dir_path):
@@ -253,6 +266,20 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         """
         # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
         key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, name))
+
+        if scope in ["fermi", "birales", "pulsar"]:
+            self.ayradb_servers = [ {
+                    "ip": config.get('server3', 'ip'),
+                    "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+                    "name": config.get('server3', 'name')
+                }
+            ]
+        if scope == "fermi":
+            self.table_name = "metadataFermi"
+        if scope == "birales":
+            self.table_name = "metadataBirales"
+        if scope == "pulsar":
+            self.table_name = "metadataPulsar"
 
         # Delete record from the SQL table
         res, error = adbc_1liner__delete_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key)
@@ -283,6 +310,20 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
             filters = [elem for elem in filters if 'sql_select' not in elem]
 
+            if scope in ["fermi", "birales", "pulsar"]:
+                self.ayradb_servers = [ {
+                        "ip": config.get('server3', 'ip'),
+                        "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+                        "name": config.get('server3', 'name')
+                    }
+                ]
+            if scope == "fermi":
+                self.table_name = "metadataFermi"
+            if scope == "birales":
+                self.table_name = "metadataBirales"
+            if scope == "pulsar":
+                self.table_name = "metadataPulsar"
+
             # Build SQL query
             def build_sql_query(filter):
                 conditions = []
@@ -298,7 +339,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         
                 # Join OR conditions
                 where_clause = ' OR '.join(conditions)
-                query = f"SELECT {select} FROM ayradb.metadata WHERE {where_clause};"
+                query = f"SELECT {select} FROM ayradb.{self.table_name} WHERE {where_clause};"
                 return query
 
             try:
@@ -352,56 +393,91 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         return self.plugin_name
 
 ####### blockchain ###########
-    def manage_request(self, callType, functionName, args):
+    async def manage_request(self, callType, functionName, args): #async
         params = {
             "channelid": "mychannel",
             "chaincodeid": "basic",
             "function": functionName,
             "args": args,
         }
-        try:
-            res = requests.get(
-                f"{self.blockchainUrl}/{callType}", headers=self.headers, params=params
-            )
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(
+                    f"{self.blockchainUrl}/{callType}", headers=self.headers, params=params
+                ) as res:
+                    if res.status == 200:
+                        text = await res.text()
+                        return {"message": text, "status": 200}
+                    return {"message": "Error", "status": res.status}
+            except aiohttp.ClientConnectionError:
+                return {"message": "Error contacting the server", "status": 503}
+        # try:
+        #     res = requests.get(
+        #         f"{self.blockchainUrl}/{callType}", headers=self.headers, params=params
+        #     )
 
-            if res.status_code == 200:
-                return {
-                    "message": res.text,
-                    "status": 200,
-                }
-            return {
-                "message": "Error",
-                "status": res.status_code,
-            }
-        except requests.exceptions.ConnectionError:
-            return {
-                "message": "Error contacting the server",
-                "status": 503,
-            }
+        #     if res.status_code == 200:
+        #         return {
+        #             "message": res.text,
+        #             "status": 200,
+        #         }
+        #     return {
+        #         "message": "Error",
+        #         "status": res.status_code,
+        #     }
+        # except requests.exceptions.ConnectionError:
+        #     return {
+        #         "message": "Error contacting the server",
+        #         "status": 503,
+        #     }
 
+    async def set_blockchain(self, value: str):
+        dict_value = json.loads(value)
+        data_hash = dict_value["sha256"]
+        fields = {k: v for k, v in dict_value.items() if k != 'sha256'}
+        metadata_hash = adbc__generate_record_key_from_field(str(fields))
+        DID = dict_value["LINK"]
+        args_createDataset = [data_hash, metadata_hash, DID]
 
-    def set_blockchain(self, value: str):
-        dict = json.loads(value)
-        data_hash = dict["sha256"]
+        return await self.manage_request("invoke", "CreateDataset", args_createDataset)
 
-        self.fields = {keys: values for keys, values in dict.items() if keys != 'sha256'}
+    async def _run_blockchain_tasks(self, results):
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                self.set_blockchain(value)
+                for value in results
+            ]
+            responses = await asyncio.gather(*tasks, return_exceptions=True)
+            for idx, res in enumerate(responses):
+                if isinstance(res, Exception):
+                    # Log, retry, or handle the exception
+                    print(f"[Error] Blockchain task {idx} failed: {repr(res)}")
+                else:
+                    # Optionally log success
+                    print(f"[OK] Blockchain task {idx} completed: {res}")
 
-        metadata_hash = adbc__generate_record_key_from_field(str(self.fields))
-        # LINK ex DID
-        DID = dict["LINK"]
+    # def set_blockchain(self, value: str):
+    #     dict = json.loads(value)
+    #     data_hash = dict["sha256"]
 
-        args_createDataset = [
-            data_hash,
-            metadata_hash,
-            DID
-        ]
-        response = self.manage_request(
-            callType="invoke",
-            functionName="CreateDataset",
-            args=args_createDataset,
-        #    headers=self.headers,
-        )
-        return response
+    #     self.fields = {keys: values for keys, values in dict.items() if keys != 'sha256'}
+
+    #     metadata_hash = adbc__generate_record_key_from_field(str(self.fields))
+    #     # LINK ex DID
+    #     DID = dict["LINK"]
+
+    #     args_createDataset = [
+    #         data_hash,
+    #         metadata_hash,
+    #         DID
+    #     ]
+    #     response = self.manage_request(
+    #         callType="invoke",
+    #         functionName="CreateDataset",
+    #         args=args_createDataset,
+    #     #    headers=self.headers,
+    #     )
+    #     return response
 
     def validate_data(self, asset, metadata_hash):
         if isinstance(asset, dict) and asset["metadataHash"] == metadata_hash:

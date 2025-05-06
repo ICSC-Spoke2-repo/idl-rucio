@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
   - name: manual-dump-and-sanity-check
-    image: lucapacioselli/ayradb-dump-sanity:test-v0.0.1
+    image: lucapacioselli/ayradb-dump-sanity:v0.0.1
     imagePullPolicy: Always
     command: [ "sleep", "infinity" ]  # Keeps the container running
     volumeMounts:

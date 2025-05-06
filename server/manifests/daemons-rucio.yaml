@@ -152,7 +152,7 @@ judgeInjector:
       cpu: "200m"
 
 image:
-  tag: latest
+  tag: release-35.6.1 #latest
   pullPolicy: Always
 
 useDeprecatedImplicitSecrets: false

@@ -20,6 +20,13 @@ servers = [ {
     }
 ]
 
+inaf_server = [ {
+        "ip": config.get('server3', 'ip'),
+        "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+        "name": config.get('server3', 'name')
+    }
+]
+
 # INFN cluster credentials
 credentials = { "username": config.get('credentials', 'username'), "password": config.get('credentials', 'password')}
 
@@ -34,9 +41,31 @@ def dump_table_idl_metadata_to_warehouse(servers: List, credentials: Dict[str, s
     res, error = adbc_1liner__dump_table_to_warehouse__wrapper(servers, credentials, table_name, field_labels_string)
     
     if error == True:
-        print(f"Dump Failed. ERROR: {error}")
+        print(f"IDL Dump Failed. ERROR: {error}")
     else:
-        print(f"Successfully dumped the table: {res}")
+        print(f"Successfully dumped the IDL table: {res}")
+
+def dump_table_inaf_metadata_to_warehouse(servers: List, credentials: Dict[str, str]):
+
+    field_labels_string_dict = dict()
+    field_labels_string_dict["metadataFermi"] = 'CHECKSUM_HDU0,CHECKSUM_HDU1,CHECKSUM_HDU2,CLOCKAPP,CREATOR,DATASUM_HDU0,DATASUM_HDU1,DATASUM_HDU2,DATE,DATE_END,DATE_OBS,DIFRSP0_HDU1,DIFRSP1_HDU1,DIFRSP2_HDU1,DIFRSP3_HDU1,DIFRSP4_HDU1,DSREF1_HDU1,DSTYP1_HDU1,DSTYP2_HDU1,DSUNI1_HDU1,DSUNI2_HDU1,DSVAL1_HDU1,DSVAL2_HDU1,EQUINOX,EXTEND,EXTNAME_HDU1,EXTNAME_HDU2,EXTVER,EXTVER_HDU2,FILENAME,GCOUNT_HDU1,GCOUNT_HDU2,GPS_OUT,HDUCLASS_HDU1,HDUCLASS_HDU2,HDUCLASS1_HDU1,HDUCLASS1_HDU2,HDUCLASS2_HDU1,HDUCLASS2_HDU2,INSTRUME,MJDREFF,MJDREFI,NAXIS_HDU0,NAXIS_HDU1,NAXIS_HDU2,NAXIS1_HDU1,NAXIS1_HDU2,NAXIS2_HDU1,NAXIS2_HDU2,NDIFRSP,NDSKEYS,OBSERVER,ONTIME,ORIGIN,PASS_VER,PCOUNT_HDU1,PCOUNT_HDU2,PROC_VER,RADECSYS,TABLE_NAME,TASSIGN,TELAPSE,TELESCOP,TIMEREF,TIMESYS,TIMEUNIT,TIMEZERO,TSTART,TSTOP,VERSION,LINK'
+    field_labels_string_dict["metadataBirales"] = 'COMMENT,TIME_SYSTEM,START_TIME,STOP_TIME,PARTICIPANT_1,PARTICIPANT_2,PARTICIPANT_3,PATH,ANGLE_TYPE,TRANSMIT_BAND,RECEIVE_BAND,TIMETAG_REF,RANGE_UNITS,DATA_QUALITY,LINK'
+    field_labels_string_dict["metadataPulsar"] = 'id,storage_path,file_path,file_version,file_name,telescop,date_obs,observer,obs_mode,backend,ra_rad,dec_rad,ra_c,dec_c,equinox,projid_character,url,policy,p_status,update_time,s_point_public_spoint_1,s_point_public_spoint_2,src_name,npol,tbin,nbits,chan_bw,obsfreq,obsbw,scanlen,checksum,checksum_gz,obsdataformat,LINK'
+    
+    for table_name in ["metadataFermi", "metadataBirales", "metadataPulsar"]:
+    
+        res = True
+        error = None
+        
+        field_labels_string = field_labels_string_dict[f"{table_name}"]
+
+        res, error = adbc_1liner__dump_table_to_warehouse__wrapper(servers, credentials, table_name, field_labels_string)
+        
+        if error == True:
+            print(f"INAF Dump {table_name} Failed. ERROR: {error}")
+        else:
+            print(f"Successfully dumped the INAF table {table_name}: {res}")
 
 if __name__ == "__main__":
     dump_table_idl_metadata_to_warehouse(servers=servers, credentials=credentials)
+    dump_table_inaf_metadata_to_warehouse(servers=inaf_server, credentials=credentials)

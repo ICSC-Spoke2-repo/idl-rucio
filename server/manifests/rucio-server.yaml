@@ -3,9 +3,17 @@ authReplicaCount: 0
 traceReplicaCount: 0
 
 image:
-  repository: lucapacioselli/rucio-server
-  tag: v1.0.5
-  pullPolicy: Always
+  repository: lucapacioselli/rucio-server 
+  tag: v1.0.6 
+  pullPolicy: Always 
+
+serverResources:
+  requests:
+    cpu: 2
+    memory: 2Gi
+  limits:
+    cpu: 4
+    memory: 4Gi
 
 secretMounts:
   - secretName: plugin
