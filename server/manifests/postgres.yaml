@@ -7,15 +7,29 @@ persistence:
   enabled: true
 
 primary:
+  nodeSelector:
+    kubernetes.io/hostname: vnode-1
+
   resources:
     requests:
-      cpu: 2
-      ephemeral-storage: 8Gi
-      memory: 2Gi
+      cpu: 3
+      memory: 6Gi
+      ephemeral-storage: 40Gi
     limits:
       cpu: 4
-      ephemeral-storage: 16Gi
-      memory: 4Gi
+      memory: 7Gi
+      ephemeral-storage: 55Gi
+
+# primary:
+#   resources:
+#     requests:
+#       cpu: 1
+#       ephemeral-storage: 32Gi
+#       memory: 1500Mi
+#     limits:
+#       cpu: 2
+#       ephemeral-storage: 64Gi
+#       memory: 3Gi
 
 auth:
   username: rucio # change if needed

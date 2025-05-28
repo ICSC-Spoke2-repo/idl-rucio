@@ -35,9 +35,9 @@ RUN fix-permissions /opt/setup \
 
 ENV RUCIO_MODE=download
 ENV RUCIO_WILDCARD_ENABLED=1
-ENV RUCIO_BASE_URL=https://rucio-server.212.189.145.181.myip.cloud.infn.it
-ENV RUCIO_AUTH_URL=https://rucio-server.212.189.145.181.myip.cloud.infn.it
-ENV RUCIO_WEBUI_URL=https://webui.212.189.145.181.myip.cloud.infn.it
+ENV RUCIO_BASE_URL=https://rucio-server.212.189.145.208.myip.cloud.infn.it
+ENV RUCIO_AUTH_URL=https://rucio-server.212.189.145.208.myip.cloud.infn.it
+ENV RUCIO_WEBUI_URL=https://webui.212.189.145.208.myip.cloud.infn.it
 ENV RUCIO_DISPLAY_NAME="IDL Test Extension"
 ENV RUCIO_NAME=IDL
 ENV RUCIO_CA_CERT=/etc/ssl/certs/ca-certificates.crt

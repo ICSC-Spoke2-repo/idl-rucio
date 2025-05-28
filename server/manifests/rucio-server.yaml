@@ -1,4 +1,4 @@
-replicaCount: 1
+replicaCount: 4
 authReplicaCount: 0
 traceReplicaCount: 0
 
@@ -9,11 +9,41 @@ image:
 
 serverResources:
   requests:
-    cpu: 2
-    memory: 2Gi
+    cpu: 3
+    memory: 6Gi
+    ephemeral-storage: 40Gi
   limits:
-    cpu: 4
-    memory: 4Gi
+    cpu: 3
+    memory: 6Gi
+    ephemeral-storage: 40Gi
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - rucio-server
+        topologyKey: "kubernetes.io/hostname"
+
+extraVolumeMounts:
+  - name: tmp-volume
+    mountPath: /tmp
+
+extraVolumes:
+  - name: tmp-volume
+    emptyDir:
+      sizeLimit: 40Gi
+
+# serverResources:
+#   requests:
+#     cpu: 1500m
+#     memory: 4Gi
+#   limits:
+#     cpu: 3500m
+#     memory: 8Gi
 
 secretMounts:
   - secretName: plugin

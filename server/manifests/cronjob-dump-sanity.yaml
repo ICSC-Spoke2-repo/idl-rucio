@@ -10,7 +10,7 @@ spec:
         spec:
           containers:
           - name: cron-dump-and-sanity
-            image: lucapacioselli/ayradb-dump-sanity:v0.0.1
+            image: lucapacioselli/ayradb-dump-sanity:v0.0.1-new
             imagePullPolicy: Always # For testing only
             command: ["idl_dump.py", "sleep(30)", "idl_consistency_check.py"]
             volumeMounts:

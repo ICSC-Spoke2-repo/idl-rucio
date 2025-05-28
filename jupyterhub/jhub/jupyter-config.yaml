@@ -17,8 +17,8 @@ singleuser:
     # https://hub.docker.com/r/jupyter/datascience-notebook/tags/
     # Inspect the Dockerfile at:
     # https://github.com/jupyter/docker-stacks/tree/HEAD/datascience-notebook/Dockerfile
-    name: lucapacioselli/jupyter4rucio #jupyter/tensorflow-notebook 
-    tag: v1.0.9 #v1.0.8 #ubuntu-22.04
+    name: lucapacioselli/jupyter4rucio
+    tag: v1.0.9-new
     # pullPolicy: Always 
   # `cmd: null` allows the custom CMD of the Jupyter docker-stacks to be used
   # which performs further customization on startup.
@@ -32,8 +32,8 @@ singleuser:
         - >
           mkdir -p /opt/rucio/etc;
           echo "[client]" >> /opt/rucio/etc/rucio.cfg;
-          echo "rucio_host = https://rucio-server.212.189.145.181.myip.cloud.infn.it" >> /opt/rucio/etc/rucio.cfg;
-          echo "auth_host = https://rucio-server.212.189.145.181.myip.cloud.infn.it" >> /opt/rucio/etc/rucio.cfg;
+          echo "rucio_host = https://rucio-server.212.189.145.208.myip.cloud.infn.it" >> /opt/rucio/etc/rucio.cfg;
+          echo "auth_host = https://rucio-server.212.189.145.208.myip.cloud.infn.it" >> /opt/rucio/etc/rucio.cfg;
           echo "ca_cert = /etc/ssl/certs/ca-certificates.crt" >> /opt/rucio/etc/rucio.cfg;
           echo "account = <YOUR_ACCOUNT>" >> /opt/rucio/etc/rucio.cfg;
           echo "username = <YOUR_USERNAME>" >> /opt/rucio/etc/rucio.cfg;
@@ -42,8 +42,8 @@ singleuser:
   extraEnv:
     RUCIO_MODE: "download"
     RUCIO_WILDCARD_ENABLED: "1"
-    RUCIO_BASE_URL: "https://rucio-server.212.189.145.181.myip.cloud.infn.it"
-    RUCIO_AUTH_URL: "https://rucio-server.212.189.145.181.myip.cloud.infn.it"
+    RUCIO_BASE_URL: "https://rucio-server.212.189.145.208.myip.cloud.infn.it"
+    RUCIO_AUTH_URL: "https://rucio-server.212.189.145.208.myip.cloud.infn.it"
     RUCIO_DISPLAY_NAME: "IDL Test Extension"
     RUCIO_NAME: "IDL"
     RUCIO_CA_CERT: "/etc/ssl/certs/ca-certificates.crt"
@@ -58,17 +58,17 @@ ingress:
    cert-manager.io/cluster-issuer: letsencrypt-prod-issuer
  ingressClassName: nginx
  hosts:
-   - jupyterhub.212.189.145.181.myip.cloud.infn.it
+   - jupyterhub.212.189.145.208.myip.cloud.infn.it
  tls: 
  - hosts:
-   - jupyterhub.212.189.145.181.myip.cloud.infn.it
+   - jupyterhub.212.189.145.208.myip.cloud.infn.it
    secretName: jupyterhub-tls
 
 proxy:
  https:
    enabled: false
    hosts:
-     - jupyterhub.212.189.145.181.myip.cloud.infn.it
+     - jupyterhub.212.189.145.208.myip.cloud.infn.it
    letsencrypt:
      contactEmail: <YOUR_EMAIL>
 
