@@ -49,6 +49,7 @@ def write_jupyterlab_config():
                        v in instance_config.items() if v is not None}
     config_json['RucioConfig'] = {
         'instances': [instance_config],
+        'log_level': os.getenv('RUCIO_LOG_LEVEL', 'debug'),
         # "default_instance": os.getenv('RUCIO_DEFAULT_INSTANCE'),
         # "default_auth_type": os.getenv('RUCIO_DEFAULT_AUTH_TYPE'),
     }

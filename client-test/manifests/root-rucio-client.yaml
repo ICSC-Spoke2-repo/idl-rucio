@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: rucio-client-root
-        image: lucapacioselli/rucio-client-test:v1.1.9-new
+        image: lucapacioselli/rucio-client-test:v1.2.0
         env:
         - name: RUCIO_CFG_CLIENT_RUCIO_HOST
           value: http://server-rucio-server # intended to be deployed on the same k8s cluster as the server

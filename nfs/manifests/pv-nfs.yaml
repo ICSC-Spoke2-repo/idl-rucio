@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nfs
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany   # NFS supporta accessi da più pod contemporaneamente
+  nfs:
+    server: 212.189.145.26     # IP del server NFS
+    path: /      # path esportato dal server NFS
+  persistentVolumeReclaimPolicy: Retain

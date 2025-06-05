@@ -385,6 +385,8 @@ def customUpload(args): #--scope, --rse, --file, --meta, --bulk-txt
         except Exception as e:
             raise Exception(f"ERROR: something went wrong: {e}")
         logging.info("Set-metadata for the uploaded files...")
+
+        time.sleep(1.0) # Wait for the upload to finish and the files to be registered in Rucio
         
         time_of_set_operation = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         random_7_digits = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
@@ -392,6 +394,8 @@ def customUpload(args): #--scope, --rse, --file, --meta, --bulk-txt
         end_file = f"{did_scope}_{time_of_set_operation}_{random_7_digits}_END.json"
 
         client.set_metadata(scope=did_scope, name=start_file, key="JSON", value="json_string")
+
+        time.sleep(0.5) # Wait for the tmp folder to be created
 
         i = 0
         for file, meta in data_meta_pairs:
@@ -409,6 +413,8 @@ def customUpload(args): #--scope, --rse, --file, --meta, --bulk-txt
                 i += 1
             except Exception as e:
                 raise Exception("ERROR: Set-metadata failed")
+            
+        time.sleep(1.0) # Wait for the metadata to be written in the tmp folder
         
         client.set_metadata(scope=did_scope, name=end_file, key="JSON", value="json_string")
 
@@ -441,7 +447,11 @@ def customDownload(args): #--scope, --file, --base_dir, --no_subdir, --bulk
 
         _ = client.get_metadata(scope="START", name=start_file, plugin="IDL")
 
+        time.sleep(0.5) # Wait for the tmp folder to be created
+
         _ = client.get_metadata(scope=args.scope, name=check_name, plugin="IDL")
+
+        time.sleep(1.0) # Wait for the metadata to be written in the tmp folder
 
         meta = client.get_metadata(scope="END", name=end_file, plugin="IDL")
 
@@ -549,6 +559,8 @@ def customGetMeta(args): #--plugin, dids
 
         _ = client.get_metadata(scope="START", name=start_file, plugin=args.plugin)
 
+        time.sleep(0.5) # Wait for the tmp folder to be created
+
         try:
             for did in did_list:
                 scope = did.split(':')[0]
@@ -559,6 +571,8 @@ def customGetMeta(args): #--plugin, dids
                 _ = client.get_metadata(scope=scope, name=name, plugin=args.plugin)
         except Exception as e:
             raise Exception(f"Error:{e}")
+
+        time.sleep(1.0) # Wait for the DIDs to be written in the tmp file
         
         metas = client.get_metadata(scope="END", name=end_file, plugin=args.plugin)
         metas = metas["Output"]

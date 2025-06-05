@@ -18,7 +18,7 @@ singleuser:
     # Inspect the Dockerfile at:
     # https://github.com/jupyter/docker-stacks/tree/HEAD/datascience-notebook/Dockerfile
     name: lucapacioselli/jupyter4rucio
-    tag: v1.0.9-new
+    tag: v1.1.0
     # pullPolicy: Always 
   # `cmd: null` allows the custom CMD of the Jupyter docker-stacks to be used
   # which performs further customization on startup.
@@ -47,6 +47,7 @@ singleuser:
     RUCIO_DISPLAY_NAME: "IDL Test Extension"
     RUCIO_NAME: "IDL"
     RUCIO_CA_CERT: "/etc/ssl/certs/ca-certificates.crt"
+    RUCIO_LOG_LEVEL: "debug"
     JUPYTERHUB_SINGLEUSER_APP: "jupyter_server.serverapp.ServerApp"
   ### Storage is handled by the k8s cluster's local-path-provisioner ###
 

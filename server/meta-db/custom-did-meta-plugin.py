@@ -84,7 +84,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         self.plugin_name = "IDL"
 
         config = configparser.ConfigParser()
-        config.read('/tmp/AyraDB_cluster_credentials.cfg')
+        config.read('/tmp/metaDB_credentials_template.cfg')
 
         # AyraDB cluster INFN coordinates
         self.ayradb_servers = [ {
@@ -155,10 +155,11 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         :param session: The database session in use.
         """
         if key == "JSON":
-            dir_path = "/tmp/" + "_".join(name.split("_")[:-1])
+            dir_path = "/mnt/" + "_".join(name.split("_")[:-1])
+
             if name.split("_")[-1] == "START.json":
                 os.makedirs(dir_path)
-                print(f"Directory '{dir_path}' created successfully!")
+                print(f"Directory '{dir_path}' created successfully! SET-METADATA")
             if name.split("_")[-1] == "END.json":
                 import subprocess
                 result = subprocess.run(["pipelined_utils.py", "set", "--dir", f"{dir_path}", "--scope", f"{name.split('_')[0]}"], capture_output=True, text=True)
@@ -210,7 +211,7 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         hash_data = name.split(':')[0]
         clean_name = name.split(':')[1]
 
-        dir_path = "/tmp/" + f"get-metadata_{dir_name}"
+        dir_path = "/mnt/" + f"get-metadata_{dir_name}"
         
         if clean_name == "START":
             os.makedirs(dir_path)

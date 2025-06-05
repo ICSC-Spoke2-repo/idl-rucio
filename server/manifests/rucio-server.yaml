@@ -13,9 +13,9 @@ serverResources:
     memory: 6Gi
     ephemeral-storage: 40Gi
   limits:
-    cpu: 3
-    memory: 6Gi
-    ephemeral-storage: 40Gi
+    cpu: 4
+    memory: 8Gi
+    ephemeral-storage: 50Gi
 
 affinity:
   podAntiAffinity:
@@ -28,22 +28,9 @@ affinity:
                 - rucio-server
         topologyKey: "kubernetes.io/hostname"
 
-extraVolumeMounts:
-  - name: tmp-volume
-    mountPath: /tmp
-
-extraVolumes:
-  - name: tmp-volume
-    emptyDir:
-      sizeLimit: 40Gi
-
-# serverResources:
-#   requests:
-#     cpu: 1500m
-#     memory: 4Gi
-#   limits:
-#     cpu: 3500m
-#     memory: 8Gi
+# NOTE: To use the nfs shared storage among the rucio server replicas, you need to use the custom helm chart from the IDL project and set the following values
+nfs:
+  pvcName: pvc-nfs
 
 secretMounts:
   - secretName: plugin
