@@ -27,6 +27,16 @@ affinity:
               values:
                 - rucio-server
         topologyKey: "kubernetes.io/hostname"
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: NotIn
+              values:
+                - vnode-0
+                - vnode-1
+                - vnode-7
 
 # NOTE: To use the nfs shared storage among the rucio server replicas, you need to use the custom helm chart from the IDL project and set the following values
 nfs:

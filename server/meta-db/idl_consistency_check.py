@@ -1,202 +1,352 @@
 #!/usr/bin/env python3
 
-from rucio.client import Client
-#from rucio.client.replicaclient import ReplicaClient
-from adbc.core.adbc import adbc_1liner__sql__wrapper, adbc__generate_record_key_from_field, adbc_1liner__delete_record__wrapper
-import os
+import argparse
 import configparser
+import logging
+import os
 import psycopg2
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
 
-config_db = configparser.ConfigParser()
-config_db.read('/tmp/rucio_db_creds.cfg') # /etc/config/ after secret mount
-DB_HOST = "rucio-db-postgresql.rucio-idl.svc.cluster.local"
-DB_PORT = 5432
-DB_NAME = config_db.get('database', 'db_name')
-DB_USER = config_db.get('database', 'db_user')
-DB_PASSWORD = config_db.get('database', 'db_password')
+from rucio.client import Client
+from adbc.core.adbc import (
+    adbc_1liner__sql__wrapper,
+    adbc__generate_record_key_from_field,
+    adbc_1liner__delete_record__wrapper,
+)
 
-# Method to convert results of the DB queries into strings
+# --- Logger Setup ---
+LOG_FORMAT = "[%(levelname)s] %(asctime)s - %(message)s"
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
+logger = logging.getLogger()
+
+# --- Helpers ---
+
 def convert_bytearrays(data):
     if isinstance(data, dict):
-        # Recursively process each key-value pair in the dictionary
-        return {keys: convert_bytearrays(values) for keys, values in data.items()}
+        return {k: convert_bytearrays(v) for k, v in data.items()}
     elif isinstance(data, list):
-        # Recursively process each element in the list
-        return [convert_bytearrays(item) for item in data]
+        return [convert_bytearrays(i) for i in data]
     elif isinstance(data, bytearray):
         try:
-            # Attempt to decode the bytearray to a string
-            decoded_string = data.decode('utf-8')  # Change 'utf-8' if needed
-            return decoded_string  # Return as string if it can't be parsed as datetime
-        
+            return data.decode("utf-8")
         except UnicodeDecodeError:
-            return str(data)  # Return as a string representation if decoding fails
+            return str(data)
     else:
-        return data  # Return as is if it's not a bytearray, list, or dict 
+        return data
 
-try:
-    # Connect to PostgreSQL
-    conn = psycopg2.connect(
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT
+def parse_args():
+    parser = argparse.ArgumentParser(description="Consistency check between Rucio DB and AyraDB")
+    parser.add_argument(
+        "--delete", action="store_true", help="Enable deletion of invalid records in AyraDB"
     )
-    cursor = conn.cursor()
+    parser.add_argument(
+        "--declare-bad", action="store_true", help="Enable declaring bad replicas on Rucio"
+    )
+    parser.add_argument(
+        "--threads", type=int, default=4, help="Number of threads to use for pagination queries (default: 4)"
+    )
+    return parser.parse_args()
 
-    # Query the table and fetch three specific columns
-    query = "SELECT scope, name, availability FROM test.dids WHERE did_type='F';"
-    cursor.execute(query)
+# --- Database & AyraDB queries with pagination ---
 
-    # Fetch all results and store them in a list
-    results = cursor.fetchall()  # List of tuples
-
+def fetch_all_dids_postgres(db_config, batch_size=1000000):
+    """
+    Fetch all DIDs from PostgreSQL in batches using id pagination.
+    """
+    logger.info("Fetching all DIDs from PostgreSQL with batch size %d", batch_size)
     dids = set()
     map_state = {}
-    for scope, name, state in results:
-        did = f"{scope}:{name}"
-        dids.add(did) 
-        map_state[did] = state
-
-    # dids = set(f"{scope}:{name}" for scope, name, _ in results)
-    # map_state = {{f"{scope}:{name}": state for scope, name, state in results}}
-
-    # Print the extracted columns
-    print("Column DID:", dids)
-    print("Map state:", map_state)
-
-    # Cleanup
-    cursor.close()
-    conn.close()
-
-except Exception as e:
-    print("Error:", e)
-
-config = configparser.ConfigParser()
-config.read('/etc/config/AyraDB_cluster_credentials.cfg')
-
-# AyraDB cluster INFN coordinates
-servers = [ {
-        "ip": config.get('server1', 'ip'),
-        "port": int(config.get('server1', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
-        "name": config.get('server1', 'name')
-    },
-    {
-        "ip": config.get('server2', 'ip'),
-        "port": int(config.get('server2', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
-        "name": config.get('server2', 'name')
-    }
-]
-
-inaf_server = [ {
-        "ip": config.get('server3', 'ip'),
-        "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
-        "name": config.get('server3', 'name')
-    }
-]
-
-# INFN cluster credentials
-credentials = { "username": config.get('credentials', 'username'), "password": config.get('credentials', 'password')}
-
-table_name = 'metadata'
-
-try:
-    query = f"SELECT LINK FROM ayradb.metadata;"
-    res, error, records = adbc_1liner__sql__wrapper(servers, credentials, query, warehouse_query=True)
-    if res == False:
-        print(f"{error}")
-    results = set()
-    for dicts in records:
-        converted_dict = convert_bytearrays(dicts)
-        value = set(converted_dict.values())
-        results.update(value)
-except Exception as e:
-    print("Error:", e)
-
-for table_name in ["metadataFermi", "metadataBirales", "metadataPulsar"]:
     try:
-        queries = f"SELECT LINK FROM ayradb.{table_name};"
-        res, error, records = adbc_1liner__sql__wrapper(inaf_server, credentials, queries, warehouse_query=True)
-        if res == False:
-            print(f"{error}")
-        results = set()
-        for dicts in records:
-            converted_dict = convert_bytearrays(dicts)
-            value = set(converted_dict.values())
-            results.update(value)
-    except Exception as e:
-        print("Error:", e)
-
-print("#########################################################")
-print(len(dids & results))
-print(len(dids - results))
-print(len(results - dids))
-
-intersection = dids & results
-delete_meta = {did for did in intersection if map_state[did] not in ['A', 'C', 'T']}
-print(delete_meta)
-for did in delete_meta:
-    scope = did.split(':')[0]
-    name = did.split(':')[1]
-    # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
-    key = adbc__generate_record_key_from_field(f"{scope}:{name}")
-    if scope in ["fermi", "birales", "pulsar"]:
-        servers = inaf_server
-        table_name = f"metadata{scope}"
-    # Delete record from the SQL table
-    res, error = adbc_1liner__delete_record__wrapper(servers, credentials, table_name, key)
-    # Check result of deleting the record
-    if res == False:
-        print(f'ERROR: deleting the record for {scope}:{name}: {error}' )
-
-hanging_meta = results - dids
-print(hanging_meta)
-for did in hanging_meta:
-    scope = did.split(':')[0]
-    name = did.split(':')[1]
-    # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
-    key = adbc__generate_record_key_from_field(f"{scope}:{name}")
-    if scope in ["fermi", "birales", "pulsar"]:
-        servers = inaf_server
-        table_name = f"metadata{scope}"
-    # Delete record from the SQL table
-    res, error = adbc_1liner__delete_record__wrapper(servers, credentials, table_name, key)
-    # Check result of deleting the record
-    if res == False:
-        print(f'ERROR: deleting the record for {scope}:{name}: {error}' )
-
-os.environ['RUCIO_CONFIG'] = '/tmp/rucio_credentials.cfg' # /etc/config/ after secret mount
-config_rucio = configparser.ConfigParser()
-config_rucio.read('/tmp/rucio_credentials.cfg') # /etc/config/ after secret mount
-username = config_rucio.get('client', 'username')
-password = config_rucio.get('client', 'password')
-account = config_rucio.get('client', 'account')
-
-client = Client(
-            rucio_host = "https://rucio-server.212.189.145.181.myip.cloud.infn.it:443",
-            auth_host = "https://rucio-server.212.189.145.181.myip.cloud.infn.it:443",
-            auth_type = "userpass",
-            creds = {
-                "username": username,
-                "password": password,
-            },
-            account = account
+        conn = psycopg2.connect(
+            dbname=db_config["db_name"],
+            user=db_config["db_user"],
+            password=db_config["db_password"],
+            host=db_config["db_host"],
+            port=db_config["db_port"],
         )
+        cursor = conn.cursor()
+        last_created_at = None
 
-difference = dids - results
-bad_replicas = {did for did in difference if map_state[did] in ['A', 'C', 'T']}
-print(bad_replicas)
-for did in bad_replicas:
-    scope = did.split(':')[0]
-    name = did.split(':')[1]
-    #rpcl = ReplicaClient(Client)
-    rse_list = [list(replica['states'].keys()) for replica in client.list_replicas(dids=[{'scope': scope, 'name': name}])]
-    replica_state = [list(replica['states'].values()) for replica in client.list_replicas(dids=[{'scope': scope, 'name': name}])]
-    if replica_state[0] != "AVAILABLE":
-        continue
-    for rse in rse_list[0]:
-        # This works only on the state of the RSE! I need to find a way to update the "availability" on the internal metadata table...
-        client.declare_bad_file_replicas(replicas=[{'scope': scope, 'name': name, 'rse': rse}], reason="File in storage with no metadata in external DB")
-        #client.update_replicas_states(rse, files=[{'scope': scope, 'name': name, 'state': 'D'}])
-        #client.set_metadata(scope=scope, name=name, key='availability', value='D')
+        while True:
+            if last_created_at:
+                query = """
+                SELECT scope, name, availability, created_at
+                FROM test.dids
+                WHERE did_type = 'F' AND created_at > %s
+                ORDER BY created_at
+                LIMIT %s;
+                """
+                cursor.execute(query, (last_created_at, batch_size))
+            else:
+                query = """
+                SELECT scope, name, availability, created_at
+                FROM test.dids
+                WHERE did_type = 'F'
+                ORDER BY created_at
+                LIMIT %s;
+                """
+                cursor.execute(query, (batch_size,))
+            
+            rows = cursor.fetchall()
+            if not rows:
+                break
+
+            for row in rows:
+                scope, name, state, _ = row
+                did = f"{scope}:{name}"
+                dids.add(did)
+                map_state[did] = state
+            
+            last_created_at = rows[-1][3]  # Update cursor
+            logger.debug(f"Fetched batch up to DID created at: {last_created_at}")
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logger.error("Error fetching DIDs from PostgreSQL: %s", e)
+    logger.info("Fetched %d DIDs from PostgreSQL", len(dids))
+    return dids, map_state
+
+def fetch_links_paginated(server_list, credentials, table_name, batch_size=50000000000, threads=4):
+    """
+    Fetch all LINK records from AyraDB using pagination by ID with multithreading.
+    """
+    logger.info(f"Fetching LINK records from '{table_name}' with batch size {batch_size} and {threads} threads")
+    results = set()
+    queue = Queue()
+
+    # Worker to fetch page
+    def worker():
+        while True:
+            batch = queue.get()
+            if batch is None:
+                break
+            start_id, end_id = batch
+            query = (
+                f"SELECT LINK FROM ayradb.{table_name} WHERE id >= {start_id} AND id < {end_id};"
+            )
+            try:
+                res, error, records = adbc_1liner__sql__wrapper(server_list, credentials, query, warehouse_query=True)
+                if not res:
+                    logger.error(f"Error in query {query}: {error}")
+                else:
+                    for record in records:
+                        converted = convert_bytearrays(record)
+                        values = set(converted.values())
+                        results.update(values)
+            except Exception as e:
+                logger.error(f"Exception during query {query}: {e}")
+            queue.task_done()
+
+    # First get max id to split ranges
+    try:
+        query_max = f"SELECT MAX(id) as max_id FROM ayradb.{table_name};"
+        res, error, records = adbc_1liner__sql__wrapper(server_list, credentials, query_max, warehouse_query=True)
+        if not res:
+            logger.error(f"Error fetching max id from '{table_name}': {error}")
+            return results
+        records = convert_bytearrays(records)
+        max_id = list(records[0].values())[0]
+        logger.info(f"Max id in '{table_name}' is {max_id}")
+    except Exception as e:
+        logger.error(f"Exception fetching max id from '{table_name}': {e}")
+        return results
+
+    # Enqueue batches
+    max_id = int(max_id)
+    for start in range(0, max_id + 1, batch_size):
+        queue.put((start, start + batch_size))
+
+    # Start threads
+    threads_list = []
+    for _ in range(threads):
+        t = threading.Thread(target=worker)
+        t.start()
+        threads_list.append(t)
+
+    queue.join()
+
+    # Stop workers
+    for _ in range(threads):
+        queue.put(None)
+    for t in threads_list:
+        t.join()
+
+    logger.info(f"Fetched {len(results)} LINK records from '{table_name}'")
+    return results
+
+# --- Core consistency check functions ---
+
+def identify_differences(dids, ayra_links, map_state):
+    logger.info("Identifying differences between Rucio DB and AyraDB")
+    intersection = dids & ayra_links
+    hanging = ayra_links - dids
+    missing = dids - ayra_links
+
+    logger.info(f"Intersection count: {len(intersection)}") # Records present in both Rucio DB and AyraDB
+    logger.info(f"Hanging records count: {len(hanging)}") # Records in AyraDB with no correspondence in Rucio DB. Offset = 1, due to the record "EMPTY_RESULT" in AyraDB
+    logger.info(f"Missing records count: {len(missing)}") # Records in Rucio DB with no correspondence in AyraDB
+
+    delete_meta = {did for did in intersection if map_state[did] not in ["A", "C", "T"]}
+    logger.info(f"Records to delete: {len(delete_meta)}") # DIDs in intersection that are not in an "available" state (i.e. A, C, or T)
+
+    bad_replicas = {did for did in missing if map_state.get(did) in ["A", "C", "T"]}
+    logger.info(f"Records to declare bad replicas: {len(bad_replicas)}") # DIDs in Rucio DB that are not in AyraDB but are in an "available" state
+
+    return intersection, hanging, missing, delete_meta, bad_replicas
+
+def delete_records(delete_meta, tasi_server, inaf_server, tasi_table_name, credentials):
+    logger.info("Starting deletion of bad records in AyraDB")
+    for did in delete_meta:
+        scope, name = did.split(":", 1)
+        servers = tasi_server
+        table_name = tasi_table_name
+        if scope in ["fermi", "birales", "pulsar"]:
+            servers = inaf_server
+            table_name = f"metadata{scope.capitalize()}"
+        key = adbc__generate_record_key_from_field(did)
+        res, error = adbc_1liner__delete_record__wrapper(servers, credentials, table_name, key)
+        logger.info(f"Deleting record {did} from table '{table_name}' with key {key}")
+        if not res:
+            logger.error(f"Failed to delete record {did}: {error}")
+
+def delete_hanging_records(hanging, tasi_server, inaf_server, tasi_table_name, credentials):
+    logger.info("Deleting hanging records in AyraDB")
+    for did in hanging:
+        if did == "EMPTY_RESULT":
+            continue
+        scope, name = did.split(":", 1)
+        servers = tasi_server
+        table_name = tasi_table_name
+        if scope in ["fermi", "birales", "pulsar"]:
+            servers = inaf_server
+            table_name = f"metadata{scope.capitalize()}"
+        key = adbc__generate_record_key_from_field(did)
+        res, error = adbc_1liner__delete_record__wrapper(servers, credentials, table_name, key)
+        logger.info(f"Deleting hanging record {did} from table '{table_name}' with key {key}")
+        if not res:
+            logger.error(f"Failed to delete hanging record {did}: {error}")
+
+def declare_bad_replicas(client, bad_replicas):
+    logger.info("Declaring bad replicas on Rucio")
+    for did in bad_replicas:
+        scope, name = did.split(":", 1)
+        try:
+            replicas = list(client.list_replicas(dids=[{"scope": scope, "name": name}]))
+            if not replicas:
+                logger.warning(f"No replicas found for {did}")
+                continue
+            rse_list = [list(replica["states"].keys()) for replica in replicas]
+            replica_states = [list(replica["states"].values()) for replica in replicas]
+            logger.debug(f"Checking {did} with RSEs {rse_list} and states {replica_states}")
+            for replica_state in replica_states:
+                if replica_state[0] != "AVAILABLE":
+                    logger.info(f"Replica for {did} not available, skipping")
+                    continue
+            for rse in rse_list[0]:
+                client.declare_bad_file_replicas(
+                    replicas=[{"scope": scope, "name": name, "rse": rse}],
+                    reason="File in storage with no metadata in external DB",
+                )
+                logger.info(f"Declared {did} as bad replica on RSE {rse}")
+        except Exception as e:
+            logger.error(f"Error processing {did}: {e}")
+
+# --- Main consistency check runner ---
+
+def run_consistency_check(do_delete=False, do_declare_bad=False, threads=4):
+    # Load configs
+    config_db = configparser.ConfigParser()
+    config_db.read("/etc/config/rucio_db_creds.cfg")
+    db_config = {
+        "db_host": "rucio-db-postgresql.rucio-idl.svc.cluster.local",
+        "db_port": 5432,
+        "db_name": config_db.get("database", "db_name"),
+        "db_user": config_db.get("database", "db_user"),
+        "db_password": config_db.get("database", "db_password"),
+    }
+
+    config = configparser.ConfigParser()
+    config.read("/etc/config/AyraDB_cluster_credentials.cfg")
+    tasi_server = [
+        {
+            "ip": config.get("server1", "ip"),
+            "port": int(config.get("server1", "port")),
+            "name": config.get("server1", "name"),
+        },
+        {
+            "ip": config.get("server2", "ip"),
+            "port": int(config.get("server2", "port")),
+            "name": config.get("server2", "name"),
+        },
+    ]
+    inaf_server = [
+        {
+            "ip": config.get("server3", "ip"),
+            "port": int(config.get("server3", "port")),
+            "name": config.get("server3", "name"),
+        }
+    ]
+
+    credentials = {
+        "username": config.get("credentials", "username"),
+        "password": config.get("credentials", "password"),
+    }
+
+    tasi_table_name = "metadata"
+
+    # Fetch DIDs from Postgres
+    dids, map_state = fetch_all_dids_postgres(db_config)
+
+    # Fetch LINKS from AyraDB (pagination + multithread)
+    ayra_results = fetch_links_paginated(tasi_server, credentials, tasi_table_name, threads=threads)
+    for table_name in ["metadataFermi", "metadataBirales", "metadataPulsar"]:
+        results_sub = fetch_links_paginated(inaf_server, credentials, table_name, threads=threads)
+        ayra_results.update(results_sub)
+
+    # Calculate differences
+    intersection, hanging, missing, delete_meta, bad_replicas = identify_differences(dids, ayra_results, map_state)
+
+    # Handle deletion if requested
+    if do_delete:
+        delete_records(delete_meta, tasi_server, inaf_server, tasi_table_name, credentials)
+        delete_hanging_records(hanging, tasi_server, inaf_server, tasi_table_name, credentials)
+
+    # Handle bad replicas declaration if requested
+    if do_declare_bad:
+        client = Client()
+        declare_bad_replicas(client, bad_replicas)
+
+    LOG_DIR = "/logs/idl"
+
+    if not (do_delete or do_declare_bad):
+        from datetime import datetime
+        # Timestamp usato nei file di log
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        os.makedirs(LOG_DIR, exist_ok=True)
+
+        def dump_dids_to_log(group_name: str, dids: set):
+            if not dids:
+                return
+            filename = os.path.join(LOG_DIR, f"{group_name}_{timestamp}.log")
+            with open(filename, 'w') as f:
+                for did in sorted(dids):
+                    f.write(did + '\n')
+            logger.info(f"Dumped {len(dids)} DIDs to {filename}")
+        
+        dump_dids_to_log("hanging_meta", hanging)
+        dump_dids_to_log("replicas_no_meta", missing)
+        dump_dids_to_log("not_available_with_meta", delete_meta)
+        dump_dids_to_log("bad_replicas", bad_replicas)
+
+
+# --- Entry point ---
+
+def main():
+    args = parse_args()
+    logger.info(f"Flags - delete: {args.delete}, declare_bad: {args.declare_bad}, threads: {args.threads}")
+    run_consistency_check(do_delete=args.delete, do_declare_bad=args.declare_bad, threads=args.threads)
+
+if __name__ == "__main__":
+    main()

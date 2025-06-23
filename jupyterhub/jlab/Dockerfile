@@ -5,8 +5,8 @@ USER $NB_UID
 RUN conda install -y -c conda-forge python-gfal2 \
     && conda clean --all -f -y
 
-RUN /opt/conda/bin/python3 -m pip install rucio-jupyterlab==1.2.1 \
-    && jupyter serverextension enable --py rucio_jupyterlab --sys-prefix
+RUN /opt/conda/bin/python3 -m pip install rucio-jupyterlab==1.2.1 
+#\    && jupyter serverextension enable --py rucio_jupyterlab --sys-prefix
 
 USER root
 

@@ -268,22 +268,22 @@ class CustomDidMetaPlugin(DidMetaPlugin):
         # Key generated from a field which is unique for each record, the Rucio Data IDentifier (DID) in our case
         key = adbc__generate_record_key_from_field('{}:{}'.format(scope.internal, name))
 
-        if scope in ["fermi", "birales", "pulsar"]:
-            self.ayradb_servers = [ {
+        servers = self.ayradb_servers
+        table = self.table_name
+        if str(scope) in ["fermi", "birales", "pulsar"]:
+            config = configparser.ConfigParser()
+            config.read('/tmp/AyraDB_cluster_credentials.cfg')
+            inaf_server = [ {
                     "ip": config.get('server3', 'ip'),
                     "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
                     "name": config.get('server3', 'name')
                 }
             ]
-        if scope == "fermi":
-            self.table_name = "metadataFermi"
-        if scope == "birales":
-            self.table_name = "metadataBirales"
-        if scope == "pulsar":
-            self.table_name = "metadataPulsar"
+            table = f"metadata{str(scope).capitalize()}"
+            servers = inaf_server
 
         # Delete record from the SQL table
-        res, error = adbc_1liner__delete_record__wrapper(self.ayradb_servers, self.credentials, self.table_name, key)
+        res, error = adbc_1liner__delete_record__wrapper(servers, self.credentials, table, key)
 
         # Check result of deleting the record
         if res == False:
@@ -294,16 +294,62 @@ class CustomDidMetaPlugin(DidMetaPlugin):
     def list_dids(self, scope, filters, did_type='all', ignore_case=False, limit=None, 
                   offset=None, long=False, recursive=False, ignore_dids=None, *, session: "Optional[Session]" = None):
 
+
+        ###### WORKAROUND to call delete-metadata for an external metadata DB ######
+        if any("del_select" in elem for elem in filters):
+            try:
+                did_name = [d["del_select"] for d in filters if "del_select" in d][0]
+            except IndexError:
+                did_name = None
+            self.delete_metadata(scope=scope, name=did_name, key="Placeholder")
+            out = {"delete": "Success"}
+            return out
+
+        LIMIT_RESULTS = 10000 # Can be changed to a different value if needed
+
+        # Build safe SQL query
+        def build_sql_query(filters, table, select, scope):
+            safe_columns = {'MEAS_RANGE_MIN_AZEL_1', 'IDL_L4_VERS', 'MEAS_RANGE_MAX_RF_OBW_0', 'DATE', 'TELESCOP', 'OBSDATAFORMAT', 'TIMEZERO', 'MEAS_RANGE_MIN_ANGLE_XEYN_1', 'TBIN', 'MEAS_FORMAT_RF_SAMPLES', 'ANGLE_TYPE', 'DIFRSP0_HDU1', 'MEAS_RANGE_MIN_RF_DOPPLER_INTEGRATED_0', 'RSE', 'MEAS_FORMAT_ANGLE_AZEL', 'TIMEREF', 'MEAS_RANGE_MIN_ANGLE_XSYS_0', 'MJDREFF', 'MEAS_RANGE_MAX_RF_CARRIER_POWER_0', 'MEAS_FORMAT_PHOTO_MAG', 'DEC_C', 'SCANLEN', 'DIFRSP3_HDU1', 'MEAS_RANGE_MAX_RF_DOPPLER_INTEGRATED_0', 'MEAS_ORBIT_KEP_3', 'PARTICIPANT_N', 'MEAS_ORBIT_KEP_1', 'GPS_OUT', 'S_POINT_PUBLIC_SPOINT_2', 'DATASUM_HDU1', 'MEAS_RANGE_MAX_ANGLE_XSYS_1', 'MEAS_FORMAT_ORBIT_KEP', 'OBSBW', 'CHAN_BW', 'DSTYP2_HDU1', 'EXTEND', 'BACKEND', 'DIFRSP4_HDU1', 'DSTYP1_HDU1', 'MEAS_RANGE_UNIT', 'EXTNAME_HDU2', 'WEEK', 'DSREF1_HDU1', 'MEAS_XYZ_0', 'OBS_MODE', 'OBSERVER', 'MEAS_XYZ_2', 'POLICY', 'MEAS_RANGE_MAX_ANGLE_XEYN_1', 'MEAS_ORBIT_KEP_0', 'MEAS_RANGE_MIN_PHOTO_MAG_0', 'MEAS_RANGE_MAX_AZEL_1', 'MEAS_RANGE_MIN_RF_OBW_0', 'MEAS_FORMAT_RANGE', 'DSUNI1_HDU1', 'MEAS_RANGE_MIN_RF_DOPPLER_INSTANTANEOUS_0', 'MEAS_RANGE_MAX_RF_CARRIER_FREQUENCY_0', 'CLOCKAPP', 'RANGE_UNITS', 'ORIGIN', 'MEAS_FORMAT_RF_PC_NO', 'DEC_RAD', 'NBITS', 'MEAS_RANGE_MAX_ANGLE_XSYS_0', 'COMMENT', 'OBSFREQ', 'MEAS_RANGE_DESC', 'MEAS_RANGE_MAX_RF_PC_NO_0', 'CHECKSUM_HDU1', 'LINK', 'START_TIME', 'DATE_END', 'HDUCLASS_HDU1', 'DATASUM_HDU0', 'MEAS_ORBIT_KEP_4', 'MEAS_RANGE_MIN_RF_CARRIER_FREQUENCY_0', 'DSVAL1_HDU1', 'DATA_QUALITY', 'TIMESYS', 'RA_C', 'SRC_NAME', 'TSTOP', 'S_POINT_PUBLIC_SPOINT_1', 'PARTICIPANT_4', 'MEAS_FORMAT_ANGLE_RADEC', 'DIFRSP2_HDU1', 'DATE_OBS', 'TIMETAG_REF', 'DSUNI2_HDU1', 'CREATION_DATE', 'MEAS_RANGE_MIN_ANGLE_XEYN_0', 'NPOL', 'MEAS_FORMAT_RCS', 'MEAS_RANGE_MAX_RADEC_0', 'FILENAME', 'MEAS_RANGE_MIN_RF_CARRIER_POWER_0', 'MJDREFI', 'MEAS_RANGE_MIN_RANGE_0', 'MEAS_FORMAT_RF_OBW', 'MEAS_FORMAT_RF_CARRIER_FREQUENCY', 'PARTICIPANT_5', 'MEAS_RANGE_MIN_AZEL_0', 'MEAS_FORMAT_RF_CARRIER_POWER', 'MEAS_RANGE_MIN_RCS_0', 'RADECSYS', 'VERSION', 'MEAS_FORMAT_RF_DOPPLER_INSTANTANEOUS', 'STOP_TIME', 'MEAS_RANGE_MAX_PHOTO_MAG_0', 'MEAS_FORMAT_ANGLE_XEYN', 'REFERENCE_FRAME', 'MEAS_XYZ_1', 'MEAS_RANGE_MAX_RANGE_0', 'CREATOR', 'SENSOR_TYPE', 'PARTICIPANT_2', 'MEAS_RANGE_MIN_PHOTO_TEMPERATURE_0', 'MEAS_RANGE_MAX_RF_DOPPLER_INSTANTANEOUS_0', 'DSVAL2_HDU1', 'MEAS_RANGE_MAX_RCS_0', 'TRANSMIT_BAND', 'MEAS_FORMAT_ANGLE_XSYS', 'MEAS_ORBIT_KEP_5', 'INSTRUME', 'DIFRSP1_HDU1', 'MEAS_FORMAT_RF_DOPPLER_INTEGRATED', 'MEAS_RANGE_MIN_RADEC_0', 'MEAS_RANGE_MIN_RF_PC_NO_0', 'MEAS_RANGE_MAX_ANGLE_XEYN_0', 'EXTNAME_HDU1', 'MEAS_FORMAT_PHOTO_TEMPERATURE', 'MEAS_OTHER_IMAGE', 'TIMEUNIT', 'MEAS_ORBIT_KEP_2', 'RA_RAD', 'FILE_NAME', 'PARTICIPANT_1', 'TSTART', 'MEAS_RANGE_MAX_AZEL_0', 'TIME_SYSTEM', 'ORIGINATOR', 'EQUINOX', 'MEAS_RANGE_MIN_ANGLE_XSYS_1', 'PATH', 'RECEIVE_BAND', 'MEAS_FORMAT_RF_MODULATION', 'PROJID_CHARACTER', 'FILE_VERSION', 'TABLE_NAME', 'MEAS_RANGE_MIN_RADEC_1', 'MEAS_RANGE_MAX_PHOTO_TEMPERATURE_0', 'MEAS_RANGE_MAX_RADEC_1', 'CHECKSUM_HDU0', 'CHECKSUM_HDU2', 'EPOCH', 'PARTICIPANT_3', 'MEAS_TYPE', 'CHECKSUM', 'MEAS_FORMAT_ORBIT_XYZ', 'HDUCLASS_HDU2', 'UPDATE_TIME', 'DATASUM_HDU2', 'MEAS_FORMAT_ORBIT_COV'}
+            safe_operators = {'LIKE', '=', '!=', '<', '>', '<=', '>='}
+
+            # Validate the select clause
+            select_fields = [s.strip() for s in select.split(',')]
+            for sel in select_fields:
+                if sel not in safe_columns:
+                    raise ValueError(f"Field '{sel}' not allowed in SELECT clause")
+            safe_select = ", ".join(select_fields)
+            
+            conditions = []
+            for filter_dict in filters:
+                and_conditions = []
+                for key, value in filter_dict.items():
+                    # This is a workaround to avoid the 'name' key being added to the SQL query
+                    if key == 'name':
+                        continue
+                    
+                    field, operator = key.split(".") 
+                    # Validate field and operator against the safe lists
+                    if field not in safe_columns or operator not in safe_operators:
+                        raise ValueError(f"Invalid filter condition: {field} {operator}.")
+                    
+                    # Sanitize the string values to avoid SQL injection
+                    if isinstance(value, str):
+                        value = value.replace("'", "''")  # Escape single quotes in strings
+
+                    and_conditions.append(f"{field} {operator} '{value}'")
+                conditions.append(f"{' AND '.join(and_conditions)}")
+    
+            # Join OR conditions
+            where_clause = ' OR '.join(conditions)
+            safe_scope = str(scope).replace("'", "''")  # Escape single quotes in scope
+            count_query = f"SELECT COUNT(*) FROM ayradb.{table} WHERE ({where_clause}) AND CAST(LINK AS CHAR) LIKE '{safe_scope}%';"
+            query = f"SELECT {safe_select} FROM ayradb.{table} WHERE ({where_clause}) AND CAST(LINK AS CHAR) LIKE '{safe_scope}%'"
+            return count_query, query
+
         try:
             # Backwards compatibility for filters as single {}.
             if isinstance(filters, dict):
                 filters = [filters]
-            
-            # Workaround to call delete-metadata for an external metadata DB
-            if any("del_select" in elem for elem in filters):
-                did_name = next((d["del_select"] for d in filters if "del_select" in d), None)
-                self.delete_metadata(scope=scope, name=did_name, key="Placeholder")
-                return {"delete": "Success"}
 
             # I am passing the SELECTs in the filters in the Client as a list in the list of dicts that is the filters. Here in the plugin I split the two infos
             select_list = [elem for elem in filters if 'sql_select' in elem]
@@ -311,50 +357,47 @@ class CustomDidMetaPlugin(DidMetaPlugin):
 
             filters = [elem for elem in filters if 'sql_select' not in elem]
 
-            if scope in ["fermi", "birales", "pulsar"]:
-                self.ayradb_servers = [ {
-                        "ip": config.get('server3', 'ip'),
-                        "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
-                        "name": config.get('server3', 'name')
-                    }
-                ]
-            if scope == "fermi":
-                self.table_name = "metadataFermi"
-            if scope == "birales":
-                self.table_name = "metadataBirales"
-            if scope == "pulsar":
-                self.table_name = "metadataPulsar"
-
-            # Build SQL query
-            def build_sql_query(filter):
-                conditions = []
-                for filter_dict in filter:
-                    and_conditions = []
-                    for key, value in filter_dict.items():
-                        if key != 'name':
-                            field, operator = key.split(".") 
-                            and_conditions.append(f"{field}{operator}'{value}'") 
-                        else:
-                            pass
-                    conditions.append(f"{' AND '.join(and_conditions)}")
-        
-                # Join OR conditions
-                where_clause = ' OR '.join(conditions)
-                query = f"SELECT {select} FROM ayradb.{self.table_name} WHERE {where_clause};"
-                return query
-
             try:
-                query = build_sql_query(filters)
+                servers = self.ayradb_servers
+                count_query, query = build_sql_query(filters, self.table_name, select, scope)
+
+                if str(scope) in ["fermi", "birales", "pulsar"]:
+                    config = configparser.ConfigParser()
+                    config.read('/tmp/AyraDB_cluster_credentials.cfg')
+                    inaf_server = [ {
+                            "ip": config.get('server3', 'ip'),
+                            "port": int(config.get('server3', 'port')), # The config parser gets all the configs as strings, but the port needs to be an integer
+                            "name": config.get('server3', 'name')
+                        }
+                    ]
+                    inaf_table_name = f"metadata{str(scope).capitalize()}"
+                    servers = inaf_server
+                    count_query, query = build_sql_query(filters, inaf_table_name, select, scope)
             except:
-                raise Exception("The builfing of the SQL query went wrong")
+                raise 
+
+            # Doing a prehemptive COUNT
+            try:
+                res_count, err_count, count_result = adbc_1liner__sql__wrapper(servers, self.credentials, count_query, warehouse_query=True)
+                if res_count == False:
+                    raise Exception(f'ERROR: counting the DIDs: {err_count}')
+                total_count = self.convert_bytearrays(count_result[0])['COUNT()']
+                total_count = int(total_count)
+                limited = total_count > LIMIT_RESULTS
+                if limited:
+                    query += f" LIMIT {LIMIT_RESULTS};"
+                else:
+                    query += ";"
+            except Exception as e:
+                raise
 
             try:
                 # Management of temporary failures of SQL queries
-                max_attempts = 30 # set the maximum number of attempts, or 0 for unlimited attempts
+                max_attempts = 5 # set the maximum number of attempts, or 0 for unlimited attempts
                 n_attempts = 0
                 keep_trying = True
                 while keep_trying:
-                    res, error, records = adbc_1liner__sql__wrapper(self.ayradb_servers, self.credentials, query, warehouse_query=True)       
+                    res, error, records = adbc_1liner__sql__wrapper(servers, self.credentials, query, warehouse_query=True)       
                     if res == False and error is not None and 'AYRADB_TEMPORARY_ERROR' in error:
                         n_attempts += 1
                         if max_attempts > 0 and n_attempts > max_attempts:
@@ -363,18 +406,16 @@ class CustomDidMetaPlugin(DidMetaPlugin):
                             time.sleep(10)
                     else:
                         keep_trying = False
-                
-                # Convert the Python dicts from bytearrays to strings and append to a list
-                results = []
-                for dicts in records:
-                    converted_dict = self.convert_bytearrays(dicts)
-                    if converted_dict['LINK'].split(':')[0] == f"{scope}":
-                        results.append(converted_dict)
 
                 # Check result of getting the metadata for a DID
                 if res == False:
-                    raise Exception(f'ERROR: listing the DIDs: {error}')
+                    raise Exception(f'[ERROR] Query failed after retries: {error}')
                 elif res == True:
+                    # Convert the Python dicts from bytearrays to strings and append to a list
+                    results = [self.convert_bytearrays(dicts) for dicts in records]
+                    # This method returns a list so this is a workaround to return the total count and if the results are limited
+                    results.append({'total_count': total_count, 'limited': limited})
+
                     return results
             except:
                 raise

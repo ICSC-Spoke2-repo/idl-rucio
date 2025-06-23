@@ -309,7 +309,7 @@ def parse_filters(input_str):
         
         for cond in and_conditions:
             # Regex to capture key, operator, and value
-            match = re.match(r'(\w+)\s*(>=|<=|!=|>|<|=)\s*([^\s]+)', cond.strip())
+            match = re.match(r'(\w+)\s*(LIKE|>=|<=|!=|>|<|=)\s*([^\s]+)', cond.strip())
             
             if match:
                 field, operator, value = match.groups()
@@ -321,7 +321,7 @@ def parse_filters(input_str):
     return filters
 
 @exception_handler
-def customUpload(args): #--scope, --rse, --file, --meta, --bulk-txt
+def customUpload(args): #--scope, --rse, --file, --name, --meta, --bulk-txt
     '''
     Custom upload: upload file + set-metadata from .json file
 
@@ -333,93 +333,120 @@ def customUpload(args): #--scope, --rse, --file, --meta, --bulk-txt
     import string
     from rucio.client.uploadclient import UploadClient 
     uplc = UploadClient(client)
-    
+
     try:
-        # Bulk upload from a .txt file with a data pfn metadata pfn pair, separated by a space, for each line
-        if args.bulk_txt != " ":
+        # Handle bulk or individual input
+        if args.bulk_txt.strip():
             data_meta_pairs = []
-            try:
-                with open(args.bulk_txt, 'r') as f:
-                    for idx, line in enumerate(f, start=1):
-                        line = line.strip().split()
-                        # Verify the schema of the .txt file
-                        if len(line) != 2:
-                            raise Exception(f"Line {idx}: Expected 2 elements but found {len(line)}")
-                        data_file, meta_file = line
-                        data_meta_pairs.append((data_file, meta_file))
-            except Exception as e:
-                logging.error(f"{e}")
+            with open(args.bulk_txt, 'r') as f:
+                for idx, line in enumerate(f, start=1):
+                    parts = line.strip().split()
+                    if len(parts) == 3:
+                        data_file, name, meta_file = parts
+                    elif len(parts) == 2:
+                        data_file, meta_file = parts
+                        name = data_file.split('/')[-1]
+                    else:
+                        raise ValueError(f"Line {idx}: Expected 2 or 3 elements but found {len(parts)}")
+                    data_meta_pairs.append((data_file, name, meta_file))
         else:
-            # File and metadata pairs must be of the same number 
-            if len(args.file) != len(args.meta):
-                raise Exception("The number of data files and metadata files must be the same.")
-            data_meta_pairs = list(zip(args.file, args.meta))
+            if not (len(args.file) == len(args.meta)):
+                raise ValueError("Mismatch in number of data and metadata files.")
+            
+            if args.name and len(args.name) > 0:
+                if len(args.name) != len(args.file):
+                    raise ValueError("If 'name' is provided, it must match the number of data files.")
+                data_meta_pairs = list(zip(args.file, args.name, args.meta))
+            else:
+                data_meta_pairs = [(f, f.split('/')[-1], m) for f, m in zip(args.file, args.meta)]
 
         did_scope = args.scope
-        items = []
-        for file, meta in data_meta_pairs:
-            did_name = file.split('/')[-1] # Use the file name as the DID name
-            data_file = {}
-            data_file['path'] = file
-            data_file['rse'] = args.rse
-            data_file['did_scope'] = did_scope
-            data_file['did_name'] = did_name
-            data_file['register_after_upload'] = True
-            items.append(data_file)
+        upload_items = []
+
+        for data_file, name, _ in data_meta_pairs:
+            did_name = name.strip() or data_file.split('/')[-1]
+            upload_items.append({
+                'path': data_file,
+                'rse': args.rse,
+                'did_scope': did_scope,
+                'did_name': did_name,
+                'register_after_upload': True
+            })
+
+        # Upload
         try:
-            uplc.upload(items, summary_file_path = '/tmp/rucio_upload.json')
-        except NoFilesUploaded as e:
-            raise NoFilesUploaded("ERROR: Upload failed")
-        except NotAllFilesUploaded as e:
-            logging.warning("Not all files uploaded. Failed upload for:\n")
+            uplc = UploadClient()
+            uplc.upload(upload_items, summary_file_path='/tmp/rucio_upload.json')
+        except NoFilesUploaded:
+            return {"error": "No files uploaded", "uploaded": [], "failed_metadata": []}
+        except NotAllFilesUploaded:
+            logging.warning("Not all files uploaded. Checking summary...")
             with open("/tmp/rucio_upload.json", 'r', encoding='utf-8') as f:
                 summary = json.load(f)
-            success_upload = []
-            for file, meta in data_meta_pairs:
-                did_name = file.split('/')[-1]
+            success = []
+            for file, name, meta in data_meta_pairs:
+                did_name = name.strip() or file.split('/')[-1]
                 if f"{did_scope}:{did_name}" in summary:
-                    success_upload.append((file, meta))
+                    success.append((file, name, meta))
                 else:
-                    logging.warning(f"{did_scope}:{did_name}\n")
-            data_meta_pairs = success_upload
+                    logging.warning(f"Upload failed: {did_scope}:{did_name}")
+            data_meta_pairs = success
         except Exception as e:
-            raise Exception(f"ERROR: something went wrong: {e}")
-        logging.info("Set-metadata for the uploaded files...")
+            return {"error": f"Upload failed: {e}", "uploaded": [], "failed_metadata": []}
 
-        time.sleep(1.0) # Wait for the upload to finish and the files to be registered in Rucio
-        
-        time_of_set_operation = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
-        random_7_digits = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
-        start_file = f"{did_scope}_{time_of_set_operation}_{random_7_digits}_START.json"
-        end_file = f"{did_scope}_{time_of_set_operation}_{random_7_digits}_END.json"
+        logging.info("Setting metadata for uploaded files...")
+        time.sleep(1.0)
 
-        client.set_metadata(scope=did_scope, name=start_file, key="JSON", value="json_string")
+        timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+        suffix = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
+        start_file = f"{did_scope}_{timestamp}_{suffix}_START.json"
+        end_file = f"{did_scope}_{timestamp}_{suffix}_END.json"
 
-        time.sleep(0.5) # Wait for the tmp folder to be created
+        try:
+            client.set_metadata(scope=did_scope, name=start_file, key="JSON", value="json_string")
+        except Exception as e:
+            logging.error(f"Failed to set START metadata: {e}")
+            return {"error": "Failed to set START metadata", "uploaded": [f for f, _, _ in data_meta_pairs], "failed_metadata": "ALL"}
 
-        i = 0
-        for file, meta in data_meta_pairs:
-            did_name = file.split('/')[-1] # Use the file name as the DID name            
+        failed_metadata = []
+
+        for i, (data_file, name, meta_file) in enumerate(data_meta_pairs):
+            did_name = name.strip() or data_file.split('/')[-1]
             try:
-                # Parse the JSON file in a Python dict and add the "DID" and "sha-256" metadata
-                with open(meta, 'r') as m:
-                    json_dict = json.load(m)
-                    json_dict['LINK'] = f'{did_scope}:{did_name}'
-                    json_dict['sha256'] = sha256(file)
-                    json_string = json.dumps(json_dict)
+                with open(meta_file, 'r') as f:
+                    metadata = json.load(f)
+                    metadata['LINK'] = f'{did_scope}:{did_name}'
+                    metadata['sha256'] = sha256(data_file)
+                    metadata_json = json.dumps(metadata)
 
-                # Set the metadata for the uploaded file
-                client.set_metadata(scope=did_scope, name=f"{did_scope}_{time_of_set_operation}_{random_7_digits}_{i}.json", key="JSON", value=json_string)
-                i += 1
+                meta_name = f"{did_scope}_{timestamp}_{suffix}_{i}.json"
+                client.set_metadata(scope=did_scope, name=meta_name, key="JSON", value=metadata_json)
             except Exception as e:
-                raise Exception("ERROR: Set-metadata failed")
-            
-        time.sleep(1.0) # Wait for the metadata to be written in the tmp folder
-        
-        client.set_metadata(scope=did_scope, name=end_file, key="JSON", value="json_string")
+                logging.error(f"Failed to set metadata for {did_scope}:{did_name}: {e}")
+                failed_metadata.append(f"{did_scope}:{did_name}")
+
+        try:
+            client.set_metadata(scope=did_scope, name=end_file, key="JSON", value="json_string")
+        except Exception as e:
+            logging.warning(f"Failed to set END metadata marker: {e}")
+
+        MAX_SUCCESS_DISPLAY = 10
+        success_files = [
+            f"{did_scope}:{name.strip() or f.split('/')[-1]}"
+            for f, name, _ in data_meta_pairs
+            if f"{did_scope}:{name.strip() or f.split('/')[-1]}" not in failed_metadata
+        ]
+
+        return {
+            "success_count": len(success_files),
+            "success": success_files[:MAX_SUCCESS_DISPLAY],
+            "failed_metadata": failed_metadata
+        }
 
     except Exception as e:
-        raise
+        logging.exception("Unexpected error during upload/metadata process.")
+        return {"error": str(e), "uploaded": [], "failed_metadata": []}
+
     
 # Custom download for IDL-rucio Innovation Grant
 def customDownload(args): #--scope, --file, --base_dir, --no_subdir, --bulk
@@ -600,76 +627,64 @@ def customGetMeta(args): #--plugin, dids
             raise Exception(f"ERROR: {e}")
 
 @exception_handler
-def customListDids(args): #scope, filters
-    client = get_client(args)
-    if args.plugin == "IDL":
-        #did_name = file.split('/')[-1] # Use the file name as the DID name
-        did_scope = args.scope
-        try:
-            filters = parse_filters(args.filters)
-            for fil in filters:
-                for key, value in fil.items():
-                    if key.startswith("EPOCH") or key.startswith("CREATION_DATE"):
-                        value = np.datetime64(f'{value}')
-            i = 1
-            # For now, I'm passing the SELECTs to the plugin via the filters
-            select_dict = {'sql_select': 'LINK'}
-            filters.append(select_dict)
-            res = list(client.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False))
-            #max_list_len = len(str(abs(len(res))))
-            table = []
-            for d in res:
-                #print(f"{i}:".ljust(max_list_len + 1) + f"{json.dumps(d, indent=4)}\n")
-                #i = i + 1
-                scope_res = d["LINK"].split(':')[0]
-                name_res = d["LINK"].split(':')[1]
-                default_meta = client.get_metadata(plugin = "DID_COLUMN", scope=scope_res, name=name_res)
-                did_type = default_meta["did_type"]
-                table.append(['%s:%s' % (scope_res, name_res), did_type])
-            print(tabulate(table, tablefmt=tablefmt, headers=['SCOPE:NAME', '[DID TYPE]']))
-        except Exception as e:
-            print(f"Error: {e}")
-
-def customQuery(args): #scope, select, filters, "delete"
+def customListDids(args):
     client = get_client(args)
     did_scope = args.scope
+
     try:
         filters = parse_filters(args.filters)
+
+        # Convert date fields to np.datetime64 for AyraDB compatibility
+        # This is necessary because AyraDB expects date fields in a specific format
         for fil in filters:
             for key, value in fil.items():
-                if key.startswith("EPOCH") or key.startswith("CREATION_DATE"):
-                    value = np.datetime64(f'{value}')
-        # For now, I'm passing the SELECTs to the plugin via the filters
+                if key.startswith(("EPOCH", "CREATION_DATE", "DATE_END", "DATE_OBS", "DATE", "UPDATE_TIME")):
+                    fil[key] = np.datetime64(f'{value}')
+
+        # Build the SELECT: default to LINK if not provided
         if args.select:
-            select_dict = {'sql_select': args.select + ', LINK'}
-            filters.append(select_dict)
-            res = list(client.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False))
-            #max_list_len = len(str(abs(len(res))))
+            select_fields = args.select + ", LINK"
+        else:
+            select_fields = "LINK"
+
+        filters.append({'sql_select': select_fields})
+        output = list(client.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False))
+        res = output[:-1]  # Exclude the last element which is the total count and limited status
+
+        if not args.select:
+            # Simple list-dids mode
+            table = []
             for d in res:
-                # if "EPOCH" in d:
-                #     value = d["EPOCH"]
-                #     d["EPOCH"] = d["EPOCH"].strftime("%Y-%m-%dT%H:%M:%S") + f".{value.microsecond:06d}"
-                # if "CREATION_DATE" in d:
-                #     d["CREATION_DATE"] = d["CREATION_DATE"].replace(' ', 'T')
-                scope_res = d["LINK"].split(':')[0]
-                name_res = d["LINK"].split(':')[1]
-                default_meta = client.get_metadata(plugin = "DID_COLUMN", scope=scope_res, name=name_res)
-                did_type = default_meta["did_type"]
-                header_table = []
-                header_table.append(['%s:%s' % (scope_res, name_res), did_type])
+                link = d["LINK"]
+                scope_res, name_res = link.split(":")
+                meta = client.get_metadata(plugin="DID_COLUMN", scope=scope_res, name=name_res)
+                did_type = meta["did_type"]
+                table.append([f"{scope_res}:{name_res}", did_type])
+            print(tabulate(table, tablefmt=tablefmt, headers=["SCOPE:NAME", "[DID TYPE]"]))
+
+        else:
+            # Query mode with SELECT
+            for d in res:
+                link = d["LINK"]
+                scope_res, name_res = link.split(":")
+                meta = client.get_metadata(plugin="DID_COLUMN", scope=scope_res, name=name_res)
+                did_type = meta["did_type"]
+                header_table = [[f"{scope_res}:{name_res}", did_type]]
                 print(tabulate(header_table, tablefmt=tablefmt, headers=[]))
+
                 table = []
                 for key, value in d.items():
                     if key != "LINK":
                         table.append([key, value])
-                print(tabulate(table, tablefmt=tablefmt, headers=['SELECT', 'VALUE']))
-                #print(f"{i}:".ljust(max_list_len + 1) + f"{json.dumps(d, indent=4)}")
-                # Include to know the width of the terminal at the runtime
+                print(tabulate(table, tablefmt=tablefmt, headers=["SELECT", "VALUE"]))
+
                 import shutil
-                # Separator for each record returned by the query
-                print('\\' * shutil.get_terminal_size().columns)
-        else:
-            customListDids(args)
+                print("\\" * shutil.get_terminal_size().columns)
+        
+        print(f"Total DIDs found: {output[-1]['total_count']}.")
+        if output[-1]['limited']:
+            print("The DIDs shown here are limited to 10000 records.")
+
     except Exception as e:
         print(f"Error: {e}")
 
@@ -684,14 +699,13 @@ def delete_metadata(args): # did
             filters = "Work = Around"
             filters = parse_filters(filters)
             filters.append({"del_select": did_name})
+            print(type(filters))
             result = client.list_dids(scope=did_scope, filters=filters, did_type='all', long=False, recursive=False)
-            if result["delete"] == "Success":
+            result = list(result)
+            if result == ["delete"]:
                 print(f"Metadata of DID: {did_scope}:{did_name} DELETED")
     except Exception as e:
         print(f"Error: {e}")
-
-def erase(args):
-    pass
 
 def get_parser():
     """
@@ -740,64 +754,18 @@ def get_parser():
     oparser.add_argument('--ca-certificate', dest='ca_certificate', default=None, help='CA certificate to verify peer against (SSL).')
 
     # The list-dids command
-    list_parser = subparsers.add_parser('list-dids',
-                                        help='List the data identifiers matching some metadata (synonym for ls).',
-                                        description='''List the Data IDentifiers matching certain pattern.
-Only the collections (i.e. dataset or container) are returned by default.
-With the filter option, you can specify a list of metadata that the Data IDentifier should match.
-Please use the filter option `--filter type=all` to find all types of Data IDentifiers.''',
-                                        formatter_class=argparse.RawDescriptionHelpFormatter, epilog='''Usage example
-"""""""""""""
-
-You can query the DIDs matching a certain pattern. It always requires to specify the scope in which you want to search::
-
-    $ rucio list-dids --filter 'type=all' user.jdoe:*
-    +-------------------------------------------+--------------+
-    | SCOPE:NAME                                | [DID TYPE]   |
-    |-------------------------------------------+--------------|
-    | user.jdoe:user.jdoe.test.container.1234.1 | CONTAINER    |
-    | user.jdoe:user.jdoe.test.container.1234.2 | CONTAINER    |
-    | user.jdoe:user.jdoe.test.cont.1234.2      | CONTAINER    |
-    | user.jdoe:user.jdoe.test.dataset.1        | DATASET      |
-    | user.jdoe:user.jdoe.test.dataset.2        | DATASET      |
-    | user.jdoe:user.jdoe.test.data.1234.1      | DATASET      |
-    | user.jdoe:test.file.1                     | FILE         |
-    | user.jdoe:test.file.2                     | FILE         |
-    | user.jdoe:test.file.3                     | FILE         |
-    +-------------------------------------------+--------------+
-
-You can filter by key/value, e.g.::
-
-    $ rucio list-dids --filter 'type=CONTAINER'
-    +-------------------------------------------+--------------+
-    | SCOPE:NAME                                | [DID TYPE]   |
-    |-------------------------------------------+--------------|
-    | user.jdoe:user.jdoe.test.container.1234.1 | CONTAINER    |
-    | user.jdoe:user.jdoe.test.container.1234.2 | CONTAINER    |
-    | user.jdoe:user.jdoe.test.cont.1234.2      | CONTAINER    |
-    +-------------------------------------------+--------------+''')
-
+    list_parser = subparsers.add_parser('list-dids', help='List DIDs matching the filters, optionally with select fields') 
     list_parser.set_defaults(function=customListDids)
-    list_parser.add_argument("--plugin", choices=['IDL', 'DID_COLUMN'], default="IDL", type=str, help="Plugin to be used. Default: 'IDL'")
-    list_parser.add_argument("--filters", type=str, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used.")
-    #list_parser.add_argument('--short', dest='short', action='store_true', help='Just dump the list of DIDs.')
-    list_parser.add_argument("--scope", type=str, required=True, help="Scope where to look for DIDs")
-    #list_parser.add_argument(dest='did', nargs=1, action='store', default=None, help='Data IDentifier pattern')
-
-    # Subparser sql query
-    pars_sql = subparsers.add_parser("sql", help="List of DIDs satisfying the filters, each one in a dictionary where the key are the SELECTs")
-    pars_sql.set_defaults(function=customQuery)
-    # Get's args and flags
-    pars_sql.add_argument("--scope", type=str, required=True, help="Scope")
-    pars_sql.add_argument("--filters", type=str, required=True, help="Filters to retrieve the list of DIDs satisfying them. Operators must belong to the set of (<=, >=, =, !=, >, <) and the logical expressions AND and OR can be used")
-    pars_sql.add_argument("--select", type=str, help="SELECTs for SQL queries, e.g. --select 'PARTICIPANT_1, EPOCH'. The LINK, which is the DID, is always present in the selects")
-    pars_sql.add_argument("--delete", type=str, help=argparse.SUPPRESS)
+    #list_parser.add_argument("--plugin", choices=['IDL', 'DID_COLUMN'], default="IDL", type=str, help="Plugin to be used. Default: 'IDL'")
+    list_parser.add_argument("--filters", type=str, default=[], help="Filters to apply. Operators must belong to the set of (LIKE, <=, >=, =, !=, >, <) and the logical expressions AND and OR can be used.")
+    list_parser.add_argument("--scope", type=str, required=True, help="Scope of the DIDs to list")
+    list_parser.add_argument("--select", type=str, help="Comma-separated list of fields to select. The LINK, which is the DID, is always present in the selects")
 
     # Subparser delete-metadata 
     pars_sql = subparsers.add_parser("delete-metadata", help="List of DIDs satisfying the filters, each one in a dictionary where the key are the SELECTs")
-    pars_sql.set_defaults(function=customQuery)
+    pars_sql.set_defaults(function=delete_metadata)
     # Get's args and flags
-    pars_sql.add_argument("--did", type=str, help="DIDs for which metadata in AyraDB need to be deleted.")
+    pars_sql.add_argument("--did", type=str, nargs='+', help="DIDs for which metadata in AyraDB need to be deleted.")
 
     # Subparser upload
     pars_upload = subparsers.add_parser("upload", help="Upload and set-metadata of one or multiple files.")
@@ -806,6 +774,7 @@ You can filter by key/value, e.g.::
     pars_upload.add_argument("--scope", type=str, required=True, help="Scope")
     pars_upload.add_argument("--rse", type=str, required=True, help="RSE expression")
     pars_upload.add_argument("--file", type=str, nargs='+', help="Specifies the path to the data files")
+    pars_upload.add_argument("--name", type=str, nargs='+', help="Optional did names for the data files. If not provided, the file name will be used as the did name.")
     pars_upload.add_argument("--meta", type=str, nargs='+', help="Specifies the path to the metadata files")
     pars_upload.add_argument("--bulk-txt", default=" ", type=str, help="Specifies the path to a .txt file for bulk upload. The .txt file must contain two columns per line: the first column is the path to the data file and the second is the path to the corresponding metadata file.")
 

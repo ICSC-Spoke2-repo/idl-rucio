@@ -3,18 +3,33 @@ kind: Pod
 metadata:
   name: manual-dump-and-sanity-check
 spec:
+  nodeSelector:
+    kubernetes.io/hostname: vnode-7
   containers:
   - name: manual-dump-and-sanity-check
     image: lucapacioselli/ayradb-dump-sanity:v0.0.1-new
     imagePullPolicy: Always
     command: [ "sleep", "infinity" ]  # Keeps the container running
     volumeMounts:
-    - name: ayradb-creds-volume
+    - name: combined-creds
       mountPath: "/etc/config"
       readOnly: true
+    - name: dump-output
+      mountPath: "/logs/idl"
+      readOnly: false  # Allow writing to the log directory
   volumes:
-  - name: ayradb-creds-volume
-    secret:
-      secretName: server-ayradb-cluster
-  restartPolicy: Never
+  - name: dump-output
+    hostPath:
+      path: /home/paciosel/consistency-logs/
+      type: DirectoryOrCreate
+  - name: combined-creds
+    projected:
+      sources:
+        - secret:
+            name: server-ayradb-cluster
+        - secret:
+            name: server-root-rucio
+        - secret:
+            name: rucio-db-creds
+  restartPolicy: OnFailure  # Restart the job on failure
 
