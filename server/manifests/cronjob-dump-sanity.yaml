@@ -14,7 +14,8 @@ spec:
           - name: cron-dump-and-sanity
             image: lucapacioselli/ayradb-dump-sanity:v0.0.1-new
             imagePullPolicy: Always # For testing only
-            command: ["idl_dump.py", "-all", "sleep(60)", "idl_consistency_check.py"]
+            command: ["/bin/bash"]
+            args: ["-c", "idl_dump.py --all && sleep 60 && idl_consistency_check.py"]
             volumeMounts:
             - name: combined-creds
               mountPath: "/etc/config"
@@ -24,9 +25,8 @@ spec:
               readOnly: false  # Allow writing to the log directory
           volumes:
           - name: dump-output
-            hostPath:
-              path: /home/paciosel/consistency-logs
-              type: DirectoryOrCreate
+            persistentVolumeClaim:
+              claimName: dump-output-pvc  # Ensure this PVC exists in your cluster
           - name: combined-creds
             projected:
               sources:

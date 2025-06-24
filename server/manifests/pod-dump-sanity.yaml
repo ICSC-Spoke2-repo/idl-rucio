@@ -19,9 +19,8 @@ spec:
       readOnly: false  # Allow writing to the log directory
   volumes:
   - name: dump-output
-    hostPath:
-      path: /home/paciosel/consistency-logs/
-      type: DirectoryOrCreate
+    persistentVolumeClaim:
+      claimName: dump-output-pvc  # Ensure this PVC exists in your cluster
   - name: combined-creds
     projected:
       sources:
